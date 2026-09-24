@@ -20,8 +20,8 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 500ms
-    limit_mib: 140
-    spike_limit_mib: 60
+    limit_mib: 280
+    spike_limit_mib: 50
 
   resource/drop_ephemeral:
     attributes:

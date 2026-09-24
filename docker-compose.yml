@@ -232,13 +232,13 @@ services:
     container_name: tp-otel-collector
     command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
     environment:
-      - GOMEMLIMIT=180MiB
+      - GOMEMLIMIT=300MiB
       - GOGC=80
     deploy:
       resources:
         limits:
           cpus: '0.5'
-          memory: 256M
+          memory: 384M
     volumes:
       - ./docker/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
