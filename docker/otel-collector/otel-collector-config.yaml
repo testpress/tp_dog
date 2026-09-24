@@ -20,8 +20,8 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 500ms
-    limit_mib: 180
-    spike_limit_mib: 40
+    limit_mib: 140
+    spike_limit_mib: 60
 
   resource/drop_ephemeral:
     attributes:
@@ -32,8 +32,23 @@ processors:
 
   batch:
     timeout: 500ms
-    send_batch_size: 128
-    send_batch_max_size: 256
+    send_batch_size: 256
+    send_batch_max_size: 512
+
+  tail_sampling:
+    decision_wait: 2s
+    num_traces: 10000
+    expected_new_traces_per_sec: 2000
+    policies:
+      - name: keep_errors
+        type: status_code
+        status_code: { status_codes: [ ERROR ] }
+      - name: keep_slow_traces
+        type: latency
+        latency: { threshold_ms: 500 }
+      - name: sample_healthy_traces
+        type: probabilistic
+        probabilistic: { sampling_percentage: 10.0 }
 
 connectors:
   spanmetrics:
@@ -47,7 +62,6 @@ connectors:
       - name: db.system
       - name: db.operation
       - name: db.instance
-      - name: db.statement
       - name: server.address
       - name: server.port
       - name: error
@@ -61,8 +75,8 @@ exporters:
       insecure: true
     sending_queue:
       enabled: true
-      num_consumers: 4
-      queue_size: 100
+      num_consumers: 8
+      queue_size: 1000
 
   prometheus:
     endpoint: 0.0.0.0:8889
@@ -74,7 +88,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, tail_sampling, batch]
       exporters: [otlp/tempo, spanmetrics]
     metrics:
       receivers: [otlp, spanmetrics, postgresql]

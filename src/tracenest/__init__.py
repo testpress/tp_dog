@@ -187,9 +187,9 @@ def init(
                     if export_batch:
                         span_processor = BatchSpanProcessor(
                             safe_exporter,
-                            max_queue_size=512,
-                            max_export_batch_size=128,
-                            schedule_delay_millis=2000,
+                            max_queue_size=2048,
+                            max_export_batch_size=256,
+                            schedule_delay_millis=1000,
                         )
                     else:
                         span_processor = SimpleSpanProcessor(safe_exporter)
