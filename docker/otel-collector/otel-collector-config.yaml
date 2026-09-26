@@ -61,6 +61,7 @@ connectors:
       - name: http.route
       - name: db.system
       - name: db.operation
+      - name: db.statement
       - name: db.instance
       - name: server.address
       - name: server.port
