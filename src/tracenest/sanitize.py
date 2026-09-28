@@ -8,6 +8,13 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _STRING_LITERAL_RE = re.compile(r"'(?:''|[^'])*'")
 # Match numeric literals not attached to word characters (e.g. '= 42', ', 123.45', 'IN (1, 2)')
 _NUMERIC_LITERAL_RE = re.compile(r"(?<=[^\w\$.])\b\d+(?:\.\d+)?\b")
+# Match an IN/NOT IN predicate whose value list is purely a comma-separated run of
+# placeholders, e.g. "IN (?, ?, ?)" or "IN(?)". The inner group is deliberately unable to
+# match a subquery ("IN (SELECT ...)") or a composite element ("IN ((?), (?))") because
+# those contain tokens other than "?" and ",". This keeps the arity of the list out of the
+# resulting label so one query shape yields one series, while leaving any list that is not
+# provably a flat placeholder list untouched.
+_IN_PLACEHOLDER_LIST_RE = re.compile(r"\b(IN)\s*\(\s*\?(?:\s*,\s*\?)*\s*\)", re.IGNORECASE)
 _MAX_STATEMENT_LENGTH = 4096
 
 _SENSITIVE_QUERY_KEYS = {
@@ -24,6 +31,7 @@ def sanitize_sql(sql: Optional[str], max_length: int = _MAX_STATEMENT_LENGTH) ->
     Replaces:
     - String literals: 'example' -> ?
     - Numeric literals: 42, 3.14 -> ?
+    - Collapses placeholder list arity: 'IN (?, ?, ?)' -> 'IN (?)'
     - Normalizes multiple whitespace characters into a single space.
     - Truncates excessively long queries.
     """
@@ -39,6 +47,10 @@ def sanitize_sql(sql: Optional[str], max_length: int = _MAX_STATEMENT_LENGTH) ->
     sanitized = _STRING_LITERAL_RE.sub("?", sql)
     # Replace numeric literals
     sanitized = _NUMERIC_LITERAL_RE.sub("?", sanitized)
+    # Collapse the arity of placeholder-only IN lists. This runs after literal
+    # substitution so that a concrete list like "IN (1, 2, 3)" has already become
+    # "IN (?, ?, ?)" and is therefore eligible for collapsing.
+    sanitized = _IN_PLACEHOLDER_LIST_RE.sub(r"\1 (?)", sanitized)
     # Normalize whitespace
     normalized = _WHITESPACE_RE.sub(" ", sanitized).strip()
 

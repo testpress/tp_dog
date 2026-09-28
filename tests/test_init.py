@@ -184,6 +184,67 @@ def test_sanitize_sql():
     assert sanitize_sql("") == ""
 
 
+def test_sanitize_sql_collapses_in_list_arity():
+    """IN list length must not create a distinct label per batch size."""
+    short = sanitize_sql("SELECT * FROM api_product WHERE id IN (1, 2, 3)")
+    long = sanitize_sql(
+        "SELECT * FROM api_product WHERE id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)"
+    )
+    single = sanitize_sql("SELECT * FROM api_product WHERE id IN (7)")
+
+    assert short == "SELECT * FROM api_product WHERE id IN (?)"
+    # The whole point: differing arities collapse to one identical label.
+    assert short == long == single
+
+    # Whitespace and newline variants collapse too.
+    assert sanitize_sql("SELECT 1 FROM t WHERE id IN\n  (1,\n   2)") == (
+        "SELECT ? FROM t WHERE id IN (?)"
+    )
+    assert sanitize_sql("SELECT 1 FROM t WHERE id IN(1, 2)") == (
+        "SELECT ? FROM t WHERE id IN (?)"
+    )
+
+
+def test_sanitize_sql_preserves_in_subquery_and_composites():
+    """Only flat placeholder lists may collapse; real subqueries must survive intact."""
+    # A subquery is not a placeholder list and must not be collapsed to "IN (?)",
+    # which would merge it with a plain value list and mis-map the query.
+    subquery = "SELECT * FROM t WHERE id IN (SELECT user_id FROM orders WHERE total > 100)"
+    assert sanitize_sql(subquery) == (
+        "SELECT * FROM t WHERE id IN (SELECT user_id FROM orders WHERE total > ?)"
+    )
+
+    # Composite / nested element: inner parens mean the list is not provably flat.
+    composite = "SELECT * FROM t WHERE (a, b) IN ((1, 2), (3, 4))"
+    assert sanitize_sql(composite) == "SELECT * FROM t WHERE (a, b) IN ((?, ?), (?, ?))"
+
+    # NOT IN collapses consistently with IN, keeping the NOT operator.
+    assert sanitize_sql("SELECT * FROM t WHERE id NOT IN (1, 2, 3)") == (
+        "SELECT * FROM t WHERE id NOT IN (?)"
+    )
+
+    # A function call that merely ends in "in" must not be treated as a predicate.
+    assert sanitize_sql("SELECT checkin FROM t WHERE id = 1") == (
+        "SELECT checkin FROM t WHERE id = ?"
+    )
+
+    # An empty IN list has no placeholders and is left alone.
+    assert sanitize_sql("SELECT * FROM t WHERE id IN ()") == "SELECT * FROM t WHERE id IN ()"
+
+
+def test_sanitize_sql_in_collapse_preserves_case_and_structure():
+    """The predicate keyword casing and surrounding SQL must survive collapsing."""
+    assert sanitize_sql("select * from t where id in (1,2)") == "select * from t where id in (?)"
+    assert sanitize_sql("SELECT * FROM t WHERE a IN (1,2) AND b IN (3,4,5)") == (
+        "SELECT * FROM t WHERE a IN (?) AND b IN (?)"
+    )
+    # A string literal containing "IN (1, 2)" is redacted before list collapsing,
+    # so it must not be rewritten.
+    assert sanitize_sql("SELECT * FROM t WHERE note = 'keep IN (1, 2) here'") == (
+        "SELECT * FROM t WHERE note = ?"
+    )
+
+
 class DummyTarget:
     def greet(self, name: str) -> str:
         return f"Hello, {name}"
