@@ -3,11 +3,13 @@
 import functools
 import inspect
 import re
-from typing import Any, Callable, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional
 
 from opentelemetry.trace import SpanKind, get_current_span
 
 from tracenest.config import SDKConfig
+from tracenest.safety import UNTRACED, attempt, safe_enrich, safe_set_attribute, safe_update_name
 from tracenest.tracing import traced_span
 import tracenest
 
@@ -26,10 +28,14 @@ def _get_config() -> Optional[SDKConfig]:
 
 
 def _apply_tags(span):
-    cfg = _get_config()
+    """Apply configured tags. Self-contained: never raises, never blocks.
+
+    Callers run this *before* the application call, so the config lookup is
+    guarded here rather than at each call site.
+    """
+    cfg = attempt(_get_config, default=None, _label="view_config")
     if cfg and cfg.tags:
-        for k, v in cfg.tags.items():
-            span.set_attribute(k, v)
+        safe_enrich(span, cfg.tags)
 
 
 def _bind_response_parent(response: Any) -> None:
@@ -52,7 +58,7 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
     if request is None:
         return wrapped(*args, **kwargs)
 
-    initial_route = getattr(request, "path", "/")
+    initial_route = attempt(getattr, request, "path", default="/", _label="request.path")
 
     with traced_span(
         "django.view",
@@ -62,17 +68,22 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
     ) as span:
         _apply_tags(span)
         response = wrapped(*args, **kwargs)
-        method = getattr(request, "method", "GET")
-        raw_view_name = _resolve_view_name(request, method)
-        norm_route = _normalize_route(request, request.path if hasattr(request, "path") else initial_route)
+        # Post-application enrichment must never alter the result. Each step
+        # degrades independently so a failure here cannot affect what the
+        # application returned.
+        method = attempt(getattr, request, "method", default="GET", _label="request.method")
+        raw_view_name = attempt(_resolve_view_name, request, method, default="view", _label="view_name")
+        norm_route = attempt(
+            _normalize_route, request, initial_route, default=initial_route, _label="normalize_route"
+        )
 
-        span.update_name(f"🐍 django.view.{raw_view_name}")
-        span.set_attribute("django.view", raw_view_name)
-        span.set_attribute("django.view.name", raw_view_name)
-        span.set_attribute("resource.name", raw_view_name)
-        span.set_attribute("http.route", norm_route)
-        span.set_attribute("http.request.method", method.upper())
-        _bind_response_parent(response)
+        safe_update_name(span, f"🐍 django.view.{raw_view_name}")
+        safe_set_attribute(span, "django.view", raw_view_name)
+        safe_set_attribute(span, "django.view.name", raw_view_name)
+        safe_set_attribute(span, "resource.name", raw_view_name)
+        safe_set_attribute(span, "http.route", norm_route)
+        safe_set_attribute(span, "http.request.method", method.upper())
+        attempt(_bind_response_parent, response, _label="bind_response_parent")
         return response
 
 
@@ -89,21 +100,62 @@ def traced_view_setup(wrapped: Callable, instance: Any, args: Any, kwargs: Any) 
         return res
 
 
-def traced_view_dispatch(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
-    view_cls = instance.__class__.__name__
-    view_module = instance.__class__.__module__
-    full_view_name = f"{view_module}.{view_cls}" if view_module else view_cls
+def _resolve_dispatch_owner(wrapped: Callable, fallback: str) -> str:
+    """Best-effort owner of a dispatch method (e.g. rest_framework.views.APIView)."""
+    qualname = getattr(wrapped, "__qualname__", "")
+    if not qualname or "." not in qualname:
+        return fallback
+    owner_name = qualname.rsplit(".", 1)[0]
+    owner_mod = getattr(wrapped, "__module__", "")
+    if owner_mod and owner_mod != "builtins":
+        return f"{owner_mod}.{owner_name}"
+    return fallback
+
+
+@dataclass(frozen=True)
+class _DispatchPlan:
+    """Everything ``traced_view_dispatch`` needs, decided before the app runs.
+
+    Handler fields are ``None`` when there is no instrumentable handler, so
+    callers never have to probe for missing keys.
+    """
+
+    span_name: str
+    attrs: Dict[str, Any]
+    action: Optional[str]
+    handler: Optional[Callable]
+    handler_method: Optional[str] = None
+    method: Optional[str] = None
+    handler_span_name: Optional[str] = None
+    handler_attrs: Optional[Dict[str, Any]] = None
+
+
+def _build_dispatch_plan(instance: Any, wrapped: Callable, args: Any, kwargs: Any) -> _DispatchPlan:
+    """Prepare everything ``traced_view_dispatch`` needs before the app runs.
+
+    Introspection of a Django view is not guaranteed to be safe: views may use
+    properties, descriptors, or dynamic ``__getattribute__``. Building the plan
+    in one function means a single guard covers the whole phase, instead of
+    wrapping each lookup and risking a half-applied plan that blocks dispatch.
+    """
+    view_cls = attempt(getattr, instance.__class__, "__name__", default="View", _label="view_cls")
+    view_module = attempt(
+        getattr, instance.__class__, "__module__", default="", _label="view_module"
+    )
+    full_view_name = attempt(
+        lambda: f"{view_module}.{view_cls}" if view_module else view_cls,
+        default=view_cls,
+        _label="full_view_name",
+    )
 
     request = args[0] if args else kwargs.get("request")
-    method = getattr(request, "method", "GET").lower() if request else "get"
+    method = attempt(getattr, request, "method", default="GET", _label="request.method")
+    method = method.lower() if isinstance(method, str) else "get"
 
-    # Detect dispatch owner (e.g. rest_framework.views.APIView or View)
-    dispatch_cls = full_view_name
-    if hasattr(wrapped, "__qualname__") and "." in wrapped.__qualname__:
-        owner_name = wrapped.__qualname__.rsplit(".", 1)[0]
-        owner_mod = getattr(wrapped, "__module__", "")
-        if owner_mod and owner_mod != "builtins":
-            dispatch_cls = f"{owner_mod}.{owner_name}"
+    dispatch_cls = attempt(
+        _resolve_dispatch_owner, wrapped, full_view_name, default=full_view_name, _label="dispatch_cls"
+    )
+    action = attempt(getattr, instance, "action", default=None, _label="view.action")
 
     dispatch_span_name = f"🐍 {dispatch_cls}.dispatch"
     dispatch_attrs = {
@@ -115,61 +167,98 @@ def traced_view_dispatch(wrapped: Callable, instance: Any, args: Any, kwargs: An
         "resource.name": dispatch_span_name,
     }
 
-    with traced_span(dispatch_span_name, kind=SpanKind.INTERNAL, attributes=dispatch_attrs, tracer_name="tracenest.django") as dispatch_span:
+    handler_method = action if action and hasattr(instance, action) else method
+    handler = attempt(getattr, instance, handler_method, default=None, _label="view.handler")
+    if not (handler and callable(handler) and not getattr(handler, "_tp_traced", False)):
+        return _DispatchPlan(
+            span_name=dispatch_span_name, attrs=dispatch_attrs, action=action, handler=None
+        )
+
+    snake_cls = attempt(_to_snake_case, view_cls, default=view_cls, _label="view.snake")
+    handler_span_name = (
+        f"🐍 {view_module}.{snake_cls}.{handler_method}" if view_module else f"🐍 {snake_cls}.{handler_method}"
+    )
+    handler_attrs = {
+        "span.type": "web",
+        "component": "django",
+        "django.view.class": full_view_name,
+        "django.view.name": view_cls,
+        "django.view.method": handler_method,
+        "resource.name": handler_span_name,
+    }
+    if action:
+        handler_attrs["django.view.action"] = str(action)
+
+    return _DispatchPlan(
+        span_name=dispatch_span_name,
+        attrs=dispatch_attrs,
+        action=action,
+        handler=handler,
+        handler_method=handler_method,
+        method=method,
+        handler_span_name=handler_span_name,
+        handler_attrs=handler_attrs,
+    )
+
+
+def traced_view_dispatch(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
+    # Planning is a single guarded phase: a failure anywhere in it falls back to
+    # a plain dispatch rather than partially instrumenting the view.
+    plan = attempt(
+        _build_dispatch_plan, instance, wrapped, args, kwargs, default=UNTRACED, _label="dispatch_plan"
+    )
+    if plan is UNTRACED:
+        return wrapped(*args, **kwargs)
+
+    with traced_span(plan.span_name, kind=SpanKind.INTERNAL, attributes=plan.attrs, tracer_name="tracenest.django") as dispatch_span:
         _apply_tags(dispatch_span)
-        action = getattr(instance, "action", None)
-        if action:
-            dispatch_span.set_attribute("django.view.action", str(action))
-        handler_method = action if action and hasattr(instance, action) else method
-        handler = getattr(instance, handler_method, None)
-        if handler and callable(handler) and not getattr(handler, "_tp_traced", False):
-            # Datadog formats class handler as <module>.<view_snake_case>.<method>
-            snake_cls = _to_snake_case(view_cls)
-            handler_span_name = f"🐍 {view_module}.{snake_cls}.{handler_method}" if view_module else f"🐍 {snake_cls}.{handler_method}"
-            handler_attrs = {
-                "span.type": "web",
-                "component": "django",
-                "django.view.class": full_view_name,
-                "django.view.name": view_cls,
-                "django.view.method": handler_method,
-                "resource.name": handler_span_name,
-            }
-            if action:
-                handler_attrs["django.view.action"] = str(action)
+        if plan.action:
+            safe_set_attribute(dispatch_span, "django.view.action", str(plan.action))
 
-            # Async handlers (async def get/post) return a coroutine that Django
-            # awaits after dispatch returns. Guard with an async wrapper so the
-            # handler span covers the actual execution instead of closing at ~0ms.
-            if inspect.iscoroutinefunction(handler):
-                async def _traced_handler(*h_args, **h_kwargs):
-                    with traced_span(handler_span_name, kind=SpanKind.INTERNAL, attributes=handler_attrs, tracer_name="tracenest.django") as h_span:
-                        h_res = await handler(*h_args, **h_kwargs)
-                        _bind_response_parent(h_res)
-                        return h_res
-            else:
-                def _traced_handler(*h_args, **h_kwargs):
-                    with traced_span(handler_span_name, kind=SpanKind.INTERNAL, attributes=handler_attrs, tracer_name="tracenest.django") as h_span:
-                        h_res = handler(*h_args, **h_kwargs)
-                        _bind_response_parent(h_res)
-                        return h_res
-
-            _traced_handler._tp_traced = True
-            orig_action_handler = getattr(instance, handler_method, None)
-            orig_method_handler = getattr(instance, method, None) if method != handler_method else None
-
-            setattr(instance, handler_method, _traced_handler)
-            if orig_method_handler is not None:
-                setattr(instance, method, _traced_handler)
-            try:
-                res = wrapped(*args, **kwargs)
-                _bind_response_parent(res)
-                return res
-            finally:
-                if orig_action_handler is not None:
-                    setattr(instance, handler_method, orig_action_handler)
-                if orig_method_handler is not None:
-                    setattr(instance, method, orig_method_handler)
-        else:
+        handler = plan.handler
+        if handler is None:
             res = wrapped(*args, **kwargs)
-            _bind_response_parent(res)
+            attempt(_bind_response_parent, res, _label="bind_response_parent")
             return res
+
+        handler_span_name = plan.handler_span_name
+        handler_attrs = plan.handler_attrs
+        handler_method = plan.handler_method
+        method = plan.method
+
+        # Async handlers (async def get/post) return a coroutine that Django
+        # awaits after dispatch returns. Guard with an async wrapper so the
+        # handler span covers the actual execution instead of closing at ~0ms.
+        if inspect.iscoroutinefunction(handler):
+            async def _traced_handler(*h_args, **h_kwargs):
+                with traced_span(handler_span_name, kind=SpanKind.INTERNAL, attributes=handler_attrs, tracer_name="tracenest.django") as h_span:
+                    h_res = await handler(*h_args, **h_kwargs)
+                    attempt(_bind_response_parent, h_res, _label="bind_response_parent")
+                    return h_res
+        else:
+            def _traced_handler(*h_args, **h_kwargs):
+                with traced_span(handler_span_name, kind=SpanKind.INTERNAL, attributes=handler_attrs, tracer_name="tracenest.django") as h_span:
+                    h_res = handler(*h_args, **h_kwargs)
+                    attempt(_bind_response_parent, h_res, _label="bind_response_parent")
+                    return h_res
+
+        _traced_handler._tp_traced = True
+        orig_action_handler = attempt(getattr, instance, handler_method, default=None, _label="orig_action_handler")
+        orig_method_handler = (
+            attempt(getattr, instance, method, default=None, _label="orig_method_handler")
+            if method != handler_method
+            else None
+        )
+
+        attempt(setattr, instance, handler_method, _traced_handler, _label="bind_handler")
+        if orig_method_handler is not None:
+            attempt(setattr, instance, method, _traced_handler, _label="bind_method")
+        try:
+            res = wrapped(*args, **kwargs)
+            attempt(_bind_response_parent, res, _label="bind_response_parent")
+            return res
+        finally:
+            if orig_action_handler is not None:
+                attempt(setattr, instance, handler_method, orig_action_handler, _label="restore_handler")
+            if orig_method_handler is not None:
+                attempt(setattr, instance, method, orig_method_handler, _label="restore_method")

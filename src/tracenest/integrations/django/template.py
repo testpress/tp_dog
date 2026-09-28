@@ -6,6 +6,7 @@ from typing import Any, Callable, List, Optional
 from opentelemetry.trace import SpanKind, set_span_in_context
 
 from tracenest.config import DEFAULT_EXCLUDE_PATTERNS, SDKConfig
+from tracenest.safety import UNTRACED, attempt
 from tracenest.tracing import traced_span
 import tracenest
 
@@ -72,29 +73,55 @@ def _extract_template_name(instance: Any) -> str:
 
 
 def traced_template_render(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
+    # All of the preparation below runs BEFORE the application call, so a
+    # failure anywhere in it must degrade to an untraced render rather than
+    # prevent the template from being rendered at all. ``None`` (nothing to
+    # trace) and UNTRACED (telemetry fault) both render untraced.
+    plan = attempt(_plan_template_render, instance, default=UNTRACED, _label="plan_template_render")
+    if plan is UNTRACED or plan is None:
+        return wrapped(*args, **kwargs)
+
+    span_name, span_attrs, token, inner_tmpl = plan
+
+    try:
+        with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django"):
+            return wrapped(*args, **kwargs)
+    finally:
+        attempt(_clear_template_render_flag, instance, inner_tmpl, _label="clear_render_flag")
+        attempt(_in_template_span.reset, token, _label="reset_template_span")
+
+
+def _plan_template_render(instance: Any):
+    """Build the pre-application telemetry plan for a template render.
+
+    Returns ``None`` when the template should be rendered untraced, otherwise
+    ``(span_name, span_attrs, context_token, inner_template)``. Raises on
+    genuine telemetry faults; :func:`traced_template_render` converts those
+    into an untraced render.
+    """
     template_str = _extract_template_name(instance)
     if not template_str:
-        return wrapped(*args, **kwargs)
+        return None
 
     cfg = _get_config()
 
     # 1. Check if template instrumentation is enabled
     if cfg and not getattr(cfg, "template_enabled", True):
-        return wrapped(*args, **kwargs)
+        return None
 
     # 2. Check exclude patterns (e.g. django/forms/*, debug_toolbar/*, */widgets/*)
     exclude_patterns = getattr(cfg, "template_exclude", DEFAULT_EXCLUDE_PATTERNS) if cfg else DEFAULT_EXCLUDE_PATTERNS
     if _is_excluded(template_str, exclude_patterns):
-        return wrapped(*args, **kwargs)
+        return None
 
     # 3. If rendering inside a parent template span, check if nested template tracing is enabled
     if _in_template_span.get():
         trace_nested = getattr(cfg, "trace_nested_templates", True) if cfg else True
         if not trace_nested:
-            return wrapped(*args, **kwargs)
+            return None
 
     if getattr(instance, "_tp_rendering", False):
-        return wrapped(*args, **kwargs)
+        return None
 
     engine = getattr(instance, "engine", None)
     span_name = f"🎨 django.template: {template_str}"
@@ -113,15 +140,14 @@ def traced_template_render(wrapped: Callable, instance: Any, args: Any, kwargs: 
     inner_tmpl = getattr(instance, "template", None)
     if inner_tmpl is not None and inner_tmpl is not instance:
         inner_tmpl._tp_rendering = True
+    return span_name, span_attrs, token, inner_tmpl
 
-    try:
-        with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django"):
-            return wrapped(*args, **kwargs)
-    finally:
-        instance._tp_rendering = False
-        if inner_tmpl is not None and inner_tmpl is not instance:
-            inner_tmpl._tp_rendering = False
-        _in_template_span.reset(token)
+
+def _clear_template_render_flag(instance: Any, inner_tmpl: Any) -> None:
+    """Undo the re-entrancy flags. Never allowed to mask the render result."""
+    instance._tp_rendering = False
+    if inner_tmpl is not None and inner_tmpl is not instance:
+        inner_tmpl._tp_rendering = False
 
 
 def _extract_response_template_name(instance: Any) -> str:

@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from opentelemetry.trace import SpanKind
 
 from tracenest.config import SDKConfig
+from tracenest.safety import attempt, safe_set_attribute
 from tracenest.tracing import traced_span
 import tracenest
 
@@ -31,7 +32,9 @@ def _get_config() -> Optional[SDKConfig]:
 
 def make_traced_cache_op(op_name: str):
     def _traced_op(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
-        cfg = _get_config()
+        # Pre-application telemetry must never prevent the cache operation from
+        # running; every step below degrades independently.
+        cfg = attempt(_get_config, default=None, _label="cache_config")
         if cfg and not getattr(cfg, "cache_enabled", True):
             return wrapped(*args, **kwargs)
 
@@ -39,8 +42,8 @@ def make_traced_cache_op(op_name: str):
         if _in_cache_span.get():
             return wrapped(*args, **kwargs)
 
-        backend_mod = getattr(instance.__class__, "__module__", "")
-        backend_cls = instance.__class__.__name__
+        backend_mod = attempt(getattr, instance.__class__, "__module__", default="", _label="cache_backend_mod")
+        backend_cls = attempt(getattr, instance.__class__, "__name__", default="cache", _label="cache_backend_cls")
 
         if "django_redis" in backend_mod or "redis" in backend_mod.lower():
             span_name = f"🔴 django_redis.cache.{op_name}"
@@ -71,9 +74,9 @@ def make_traced_cache_op(op_name: str):
             with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django") as span:
                 res = wrapped(*args, **kwargs)
                 if op_name == "get":
-                    span.set_attribute("django.cache.hit", res is not None)
+                    safe_set_attribute(span, "django.cache.hit", res is not None)
                 elif op_name == "get_many":
-                    span.set_attribute("django.cache.hit", bool(res) if res is not None else False)
+                    safe_set_attribute(span, "django.cache.hit", bool(res) if res is not None else False)
                 return res
         finally:
             _in_cache_span.reset(token)

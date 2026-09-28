@@ -13,6 +13,7 @@ from typing import Any, Callable, Optional
 from opentelemetry.trace import SpanKind
 
 from tracenest.config import SDKConfig
+from tracenest.safety import attempt
 from tracenest.tracing import traced_span
 import tracenest
 
@@ -51,9 +52,11 @@ def _make_hook_wrapper(mw_path: str, mw_short: str, method_name: str):
             "django.middleware.method": method_name,
             "resource.name": span_name,
         }
-        cfg = _get_config()
+        # Pre-application telemetry: config lookup and tag merge must never
+        # prevent the middleware hook from running.
+        cfg = attempt(_get_config, default=None, _label="middleware_config")
         if cfg and cfg.tags:
-            attrs.update(cfg.tags)
+            attempt(lambda: attrs.update(cfg.tags), _label="merge_tags")
 
         # Async middleware hooks return a coroutine that Django awaits after our
         # wrapper returns. Wrap them in an async wrapper so the span covers the

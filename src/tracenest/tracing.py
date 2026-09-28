@@ -2,11 +2,29 @@
 
 import contextlib
 import contextvars
+import logging
+import sys
 from typing import Any, Dict, FrozenSet, Iterator, Optional, Tuple
 
-from opentelemetry.trace import Context, Span, SpanKind, StatusCode, get_tracer
+from opentelemetry.trace import (
+    INVALID_SPAN,
+    Context,
+    NonRecordingSpan,
+    Span,
+    SpanKind,
+    StatusCode,
+    get_tracer,
+)
 
 from tracenest.route_context import get_current_method, get_current_route
+from tracenest.safety import (
+    attempt,
+    safe_record_exception,
+    safe_set_attribute,
+    safe_set_status,
+)
+
+logger = logging.getLogger("tracenest.tracing")
 
 _active_reentrant_guards: contextvars.ContextVar[FrozenSet[Tuple[int, str]]] = contextvars.ContextVar(
     "_tracenest_active_guards", default=frozenset()
@@ -30,6 +48,52 @@ def _with_request_route(attributes: Optional[Dict[str, Any]]) -> Optional[Dict[s
 
 
 @contextlib.contextmanager
+def _span_lifecycle(
+    name: str,
+    kind: SpanKind,
+    attributes: Optional[Dict[str, Any]],
+    tracer_name: str,
+    context: Optional[Context],
+) -> Iterator[Any]:
+    """Own the OpenTelemetry span lifecycle, degrading to a no-op span on failure.
+
+    This is the only place that touches the context-manager protocol by hand.
+    It is hand-driven because setup failure and body failure must stay
+    distinguishable: a span that cannot be *created* is a telemetry fault and
+    degrades silently, whereas an exception from the *body* is the
+    application's own and must propagate untouched.
+    """
+    try:
+        span_cm = get_tracer(tracer_name).start_as_current_span(
+            name,
+            kind=kind,
+            attributes=_with_request_route(attributes),
+            context=context,
+            record_exception=False,
+            set_status_on_exception=False,
+        )
+    except Exception:
+        logger.debug("TraceNest: could not create span %r; running untraced", name, exc_info=True)
+        yield NonRecordingSpan(INVALID_SPAN)
+        return
+
+    try:
+        span = span_cm.__enter__()
+    except Exception:
+        logger.debug("TraceNest: span %r failed to start; running untraced", name, exc_info=True)
+        yield NonRecordingSpan(INVALID_SPAN)
+        return
+
+    try:
+        yield span
+    finally:
+        try:
+            span_cm.__exit__(*sys.exc_info())
+        except Exception:
+            logger.debug("TraceNest: span %r failed to end cleanly", name, exc_info=True)
+
+
+@contextlib.contextmanager
 def traced_span(
     name: str,
     kind: SpanKind = SpanKind.INTERNAL,
@@ -42,29 +106,30 @@ def traced_span(
 
     On success the span is marked OK unless the caller already set a status.
     On failure the exception is recorded, error attributes are set, the span
-    is marked ERROR, and the exception is re-raised.
+    is marked ERROR, and the exception is re-raised unchanged.
 
     Yields the active Span so callers can enrich it after the wrapped call.
+
+    Telemetry failures are absorbed here and in :mod:`tracenest.safety`, never
+    by re-running the caller. That is what makes the invariant in
+    :mod:`tracenest.safety` hold: an exception escaping the ``with`` body is
+    always the application's own.
     """
-    tracer = get_tracer(tracer_name)
-    with tracer.start_as_current_span(
-        name,
-        kind=kind,
-        attributes=_with_request_route(attributes),
-        context=context,
-        record_exception=False,
-        set_status_on_exception=False,
-    ) as span:
+    with _span_lifecycle(name, kind, attributes, tracer_name, context) as span:
         try:
             yield span
             if span.is_recording() and hasattr(span, "status") and span.status.status_code == StatusCode.UNSET:
                 span.set_status(StatusCode.OK)
         except Exception as exc:
-            if span.is_recording():
-                span.record_exception(exc)
-                span.set_attribute("error", True)
-                span.set_attribute("error.type", exc.__class__.__name__)
-                span.set_status(StatusCode.ERROR, description=str(exc))
+            # This block sits between the application's exception and the
+            # caller, so every statement in it is guarded: a telemetry fault
+            # here would otherwise *replace* the app's exception with its own,
+            # corrupting error handling on the one path where it matters most.
+            if attempt(span.is_recording, default=False, _label="is_recording"):
+                safe_record_exception(span, exc)
+                safe_set_attribute(span, "error", True)
+                safe_set_attribute(span, "error.type", exc.__class__.__name__)
+                safe_set_status(span, StatusCode.ERROR, description=str(exc))
             raise
 
 

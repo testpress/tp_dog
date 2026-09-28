@@ -10,6 +10,7 @@ from opentelemetry.trace import SpanKind, StatusCode, get_tracer
 from opentelemetry.propagate import extract
 
 from tracenest.config import SDKConfig
+from tracenest.safety import attempt, safe_enrich, safe_record_exception, safe_set_attribute, safe_set_status
 from tracenest.sanitize import sanitize_url
 from tracenest.tracing import reentrant_guard
 from tracenest.route_context import reset_request_route, set_request_route
@@ -32,17 +33,19 @@ def _get_config() -> Optional[SDKConfig]:
 
 
 def _apply_custom_tags(span, request=None, on_request_span=None):
-    """Apply static tags from config and invoke per-request callback."""
-    cfg = _get_config()
+    """Apply static tags and the user callback. Self-contained: never raises.
+
+    Runs before the application call, so the config lookup is guarded here
+    rather than at each call site.
+    """
+    cfg = attempt(_get_config, default=None, _label="request_config")
     if cfg and cfg.tags:
-        for k, v in cfg.tags.items():
-            span.set_attribute(k, v)
-    callback = on_request_span or (cfg.on_request_span if cfg else None)
+        safe_enrich(span, cfg.tags)
+
+    callback = on_request_span or getattr(cfg, "on_request_span", None)
     if callback and request is not None:
-        try:
-            callback(span, request)
-        except Exception:
-            pass
+        attempt(callback, span, request, _label="on_request_span")
+
 
 _PARAM_REGEX = re.compile(r"<(?:[a-zA-Z0-9_]+:)?([a-zA-Z0-9_]+)>")
 _TRAILING_SLASH = re.compile(r"/+$")
@@ -265,81 +268,89 @@ def traced_get_response(wrapped, instance, args, kwargs):
                 status_code = 200
                 error = False
                 route_for_metrics = path
+                # The application call is isolated from all telemetry enrichment.
+                # An exception here is the application's own and must propagate.
+                # Enrichment happens afterwards and can never turn a successful
+                # response into an error, nor raise into the host application.
                 try:
                     response = wrapped(*args, **kwargs)
-                    status_code = getattr(response, "status_code", 200)
-                    norm_route = _normalize_route(request, path)
+                except Exception as exc:
+                    error = True
+                    status_code = 500
+                    route_for_metrics = attempt(
+                        _normalize_route, request, path, default=path, _label="normalize_route"
+                    )
+                    safe_set_attribute(span, "http.route", route_for_metrics)
+                    safe_set_attribute(span, "http.response.status_code", 500)
+                    safe_set_attribute(span, "http.status_code", 500)
+                    safe_set_attribute(span, "error", True)
+                    safe_set_attribute(span, "error.type", exc.__class__.__name__)
+                    safe_record_exception(span, exc)
+                    safe_set_status(span, StatusCode.ERROR, description=str(exc))
+                    raise
+                else:
+                    status_code = attempt(
+                        getattr, response, "status_code", default=200, _label="response.status_code"
+                    )
+                    norm_route = attempt(
+                        _normalize_route, request, path, default=path, _label="normalize_route"
+                    )
                     route_for_metrics = norm_route
-                    view_name = _resolve_view_name(request, method)
+                    view_name = attempt(
+                        _resolve_view_name, request, method, default="view", _label="view_name"
+                    )
 
-                    span.set_attribute("http.route", norm_route)
-                    span.set_attribute("http.response.status_code", status_code)
-                    span.set_attribute("http.status_code", status_code)
-                    span.set_attribute("django.view", str(view_name))
-                    span.set_attribute("django.view.name", str(view_name))
-                    span.set_attribute("resource.name", f"{method} {norm_route}")
+                    safe_set_attribute(span, "http.route", norm_route)
+                    safe_set_attribute(span, "http.response.status_code", status_code)
+                    safe_set_attribute(span, "http.status_code", status_code)
+                    safe_set_attribute(span, "django.view", str(view_name))
+                    safe_set_attribute(span, "django.view.name", str(view_name))
+                    safe_set_attribute(span, "resource.name", f"{method} {norm_route}")
 
-                    import http
-                    try:
+                    def _set_phrase() -> None:
+                        import http
+
                         phrase = http.HTTPStatus(status_code).phrase
-                        span.set_attribute("http.status_text", phrase)
-                        span.set_attribute("http.response.status_text", phrase)
-                    except Exception:
-                        pass
+                        safe_set_attribute(span, "http.status_text", phrase)
+                        safe_set_attribute(span, "http.response.status_text", phrase)
 
-                    user = getattr(request, "user", None)
-                    if user and getattr(user, "is_authenticated", False):
-                        try:
+                    attempt(_set_phrase, _label="status_text")
+
+                    def _set_user() -> None:
+                        user = getattr(request, "user", None)
+                        if user and getattr(user, "is_authenticated", False):
                             user_id = str(getattr(user, "pk", getattr(user, "id", "")))
                             if user_id:
-                                span.set_attribute("usr.id", user_id)
-                                span.set_attribute("user.id", user_id)
-                                span.set_attribute("enduser.id", user_id)
-                            span.set_attribute("user.is_authenticated", True)
-                        except Exception:
-                            pass
+                                safe_set_attribute(span, "usr.id", user_id)
+                                safe_set_attribute(span, "user.id", user_id)
+                                safe_set_attribute(span, "enduser.id", user_id)
+                            safe_set_attribute(span, "user.is_authenticated", True)
+
+                    attempt(_set_user, _label="user_attrs")
 
                     if status_code >= 500:
                         error = True
-                        span.set_attribute("error", True)
-                        span.set_attribute("error.type", str(status_code))
-                        span.set_status(StatusCode.ERROR, description=f"HTTP {status_code}")
-                    elif status_code >= 400:
-                        span.set_attribute("error", False)
-                        span.set_status(StatusCode.OK)
+                        safe_set_attribute(span, "error", True)
+                        safe_set_attribute(span, "error.type", str(status_code))
+                        safe_set_status(span, StatusCode.ERROR, description=f"HTTP {status_code}")
                     else:
-                        span.set_attribute("error", False)
-                        span.set_status(StatusCode.OK)
+                        safe_set_attribute(span, "error", False)
+                        safe_set_status(span, StatusCode.OK)
 
                     if hasattr(response, "headers") or hasattr(response, "__setitem__"):
-                        try:
+                        def _set_headers() -> None:
                             response["X-Trace-ID"] = trace_id_hex
                             response["X-Span-ID"] = span_id_hex
                             # W3C trace context so downstream consumers can correlate
                             # the response back to this trace without knowing our
                             # custom headers.
                             response["traceparent"] = f"00-{trace_id_hex}-{span_id_hex}-01"
-                        except Exception:
-                            pass
+
+                        attempt(_set_headers, _label="trace_headers")
 
                     return response
-                except Exception as exc:
-                    error = True
-                    status_code = 500
-                    try:
-                        route_for_metrics = _normalize_route(request, path)
-                    except Exception:
-                        route_for_metrics = path
-                    span.set_attribute("http.route", route_for_metrics)
-                    span.set_attribute("http.response.status_code", 500)
-                    span.set_attribute("http.status_code", 500)
-                    span.set_attribute("error", True)
-                    span.set_attribute("error.type", exc.__class__.__name__)
-                    span.record_exception(exc)
-                    span.set_status(StatusCode.ERROR, description=str(exc))
-                    raise
                 finally:
                     duration_ms = (time.monotonic() - start) * 1000.0
-                    span.set_attribute("http.request.duration_ms", duration_ms)
+                    safe_set_attribute(span, "http.request.duration_ms", duration_ms)
         finally:
             reset_request_route(route_token)

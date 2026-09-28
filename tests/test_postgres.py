@@ -661,6 +661,75 @@ def test_single_exception_recorded_on_sql_error():
     assert exception_events[0].attributes["exception.type"] == "ValueError"
 
 
+# ---------------------------------------------------------------------------
+# Regression: wrappers must never re-invoke the wrapped callable.
+#
+# These assert the *effect* (how many times the statement ran), not just the
+# span. A previous implementation caught every exception and re-called the
+# wrapped function, so a failing INSERT or UPDATE was executed twice -- the
+# span still looked correct, which is why this went unnoticed.
+# ---------------------------------------------------------------------------
+
+
+def test_failing_cursor_exec_runs_statement_exactly_once():
+    """A failing query must be sent to the server once, never retried."""
+    from tracenest.integrations.postgres.cursor import traced_django_cursor_exec
+
+    tracenest.init(project_name="pg-no-retry", export_batch=False)
+    calls: list = []
+
+    def execute(sql, *args, **kwargs):
+        calls.append(sql)
+        raise RuntimeError("duplicate key value violates unique constraint")
+
+    cursor = MockRawCursor()
+    with pytest.raises(RuntimeError, match="duplicate key"):
+        traced_django_cursor_exec(execute, cursor, ("INSERT INTO orders (id) VALUES (1)",), {})
+
+    assert len(calls) == 1, f"statement executed {len(calls)} times; application code must run once"
+
+
+def test_failing_execute_wrapper_runs_statement_exactly_once():
+    """The connection.execute_wrappers path must not retry either."""
+    from tracenest.integrations.postgres.cursor import tracenest_django_db_execute_wrapper
+
+    tracenest.init(project_name="pg-no-retry-2", export_batch=False)
+    calls: list = []
+
+    def execute(sql, params, many, context):
+        calls.append(sql)
+        raise ValueError("syntax error in SQL")
+
+    conn = MockDatabaseConnection(
+        alias="default", vendor="postgresql", host="db", port=5432, db_name="test_db"
+    )
+    context = {"cursor": MockRawCursor(), "connection": conn}
+
+    with pytest.raises(ValueError):
+        tracenest_django_db_execute_wrapper(execute, "SELECT BAD", None, False, context)
+
+    assert len(calls) == 1, f"statement executed {len(calls)} times; application code must run once"
+
+
+def test_successful_query_runs_statement_exactly_once():
+    """The happy path is unaffected by the retry removal."""
+    from tracenest.integrations.postgres.cursor import traced_django_cursor_exec
+
+    exporter = InMemorySpanExporter()
+    tracenest.init(project_name="pg-happy", exporter=exporter, export_batch=False)
+
+    calls: list = []
+
+    def execute(sql, *args, **kwargs):
+        calls.append(sql)
+        return 1
+
+    traced_django_cursor_exec(execute, MockRawCursor(rowcount=1), ("SELECT 1",), {})
+
+    assert len(calls) == 1
+    assert len(exporter.get_finished_spans()) == 1
+
+
 
 
 

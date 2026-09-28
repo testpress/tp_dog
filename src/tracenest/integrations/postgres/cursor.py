@@ -8,6 +8,7 @@ from opentelemetry.trace import SpanKind, StatusCode, get_tracer
 from opentelemetry.context import attach, detach, set_value, get_value
 
 from tracenest.config import SDKConfig
+from tracenest.safety import UNTRACED, attempt, safe_set_attribute
 from tracenest.sanitize import sanitize_sql
 from tracenest.tracing import reentrant_guard, traced_span
 import tracenest
@@ -205,7 +206,14 @@ def tracenest_django_db_execute_wrapper(
             if not should_trace:
                 return execute(sql, params, many, context)
 
-            span_name, span_attrs = _build_db_span_context(sql, conn)
+            db_ctx = attempt(
+                _build_db_span_context, sql, conn, default=UNTRACED, _label="db_span_context"
+            )
+            if db_ctx is UNTRACED:
+                # Telemetry could not be built. The statement must still run.
+                return execute(sql, params, many, context)
+            span_name, span_attrs = db_ctx
+
             with traced_span(
                 span_name,
                 kind=SpanKind.CLIENT,
@@ -214,14 +222,21 @@ def tracenest_django_db_execute_wrapper(
             ) as span:
                 with suppress_db_instrumentation():
                     result = execute(sql, params, many, context)
-                rowcount = getattr(cursor, "rowcount", None)
-                if rowcount is not None and rowcount >= 0:
-                    span.set_attribute("db.row_count", rowcount)
-                    span.set_attribute("db.response.returned_rows", rowcount)
+                # Post-application enrichment. A closed or broken cursor can
+                # raise here (psycopg2 InterfaceError), which must not turn a
+                # successful statement into an application error.
+                rowcount = attempt(
+                    getattr, cursor, "rowcount", default=None, _label="db.rowcount"
+                )
+                if isinstance(rowcount, int) and rowcount >= 0:
+                    safe_set_attribute(span, "db.row_count", rowcount)
+                    safe_set_attribute(span, "db.response.returned_rows", rowcount)
                 return result
     except Exception as exc:
+        # Never retry: a failing statement has already been sent to the server and
+        # re-sending it would double side effects. Propagate instead.
         logger.debug("TraceNest DB execute wrapper error: %s", exc, exc_info=True)
-        return execute(sql, params, many, context)
+        raise
 
 
 def traced_django_cursor_exec(
@@ -244,7 +259,13 @@ def traced_django_cursor_exec(
                 return wrapped(*args, **kwargs)
 
             sql = args[0] if args else kwargs.get("sql", "")
-            span_name, span_attrs = _build_db_span_context(sql, instance)
+            db_ctx = attempt(
+                _build_db_span_context, sql, instance, default=UNTRACED, _label="db_span_context"
+            )
+            if db_ctx is UNTRACED:
+                # Telemetry could not be built. The statement must still run.
+                return wrapped(*args, **kwargs)
+            span_name, span_attrs = db_ctx
 
             with traced_span(
                 span_name,
@@ -254,12 +275,21 @@ def traced_django_cursor_exec(
             ) as span:
                 with suppress_db_instrumentation():
                     result = wrapped(*args, **kwargs)
-                cursor = getattr(instance, "cursor", instance)
-                rowcount = getattr(cursor, "rowcount", None)
-                if rowcount is not None and rowcount >= 0:
-                    span.set_attribute("db.row_count", rowcount)
-                    span.set_attribute("db.response.returned_rows", rowcount)
+                # Post-application enrichment. A closed or broken cursor can
+                # raise here (psycopg2 InterfaceError), which must not turn a
+                # successful statement into an application error.
+                cursor = attempt(
+                    getattr, instance, "cursor", default=instance, _label="db.cursor"
+                )
+                rowcount = attempt(
+                    getattr, cursor, "rowcount", default=None, _label="db.rowcount"
+                )
+                if isinstance(rowcount, int) and rowcount >= 0:
+                    safe_set_attribute(span, "db.row_count", rowcount)
+                    safe_set_attribute(span, "db.response.returned_rows", rowcount)
                 return result
     except Exception as exc:
+        # Never retry: the statement has already been executed, and re-running it
+        # would double side effects. Propagate instead.
         logger.debug("TraceNest cursor exec wrapper error: %s", exc, exc_info=True)
-        return wrapped(*args, **kwargs)
+        raise

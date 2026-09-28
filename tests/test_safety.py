@@ -1,0 +1,433 @@
+"""Tests for the instrumentation transparency invariant.
+
+TraceNest must never:
+
+  1. prevent application execution (``pre``),
+  2. execute application code more than once (``once``),
+  3. alter the application's result or exception (``post``).
+
+These tests deliberately break *telemetry* to prove the application is
+unaffected. A span that merely looks correct is not evidence of any of
+the three properties.
+"""
+
+import pytest
+
+import tracenest
+from tracenest.integrations.base import BaseIntegration
+from tracenest.safety import UNTRACED, attempt, safe_set_attribute
+from tracenest.tracing import traced_span
+
+
+class _FakeIntegration(BaseIntegration):
+    name = "fake"
+
+    def is_installed(self) -> bool:
+        return True
+
+    def _apply_patch(self) -> None:
+        pass
+
+
+def _boom(*a, **k):
+    raise RuntimeError("telemetry bug")
+
+
+# --------------------------------------------------------------------------
+# The safety module itself
+# --------------------------------------------------------------------------
+
+
+def test_attempt_returns_default_instead_of_raising():
+    assert attempt(_boom, default="fallback") == "fallback"
+
+
+def test_attempt_passes_through_success():
+    assert attempt(lambda x: x * 2, 21, default=None) == 42
+
+
+def test_untraced_sentinel_is_falsy_and_singleton():
+    from tracenest.safety import _Untraced
+
+    assert bool(UNTRACED) is False
+    assert _Untraced() is UNTRACED
+
+
+def test_safe_set_attribute_never_raises():
+    class BadSpan:
+        def set_attribute(self, k, v):
+            raise RuntimeError("span is broken")
+
+    safe_set_attribute(BadSpan(), "k", "v")  # must not raise
+
+
+# --------------------------------------------------------------------------
+# Invariant #1 — pre-application telemetry failure must not block the app
+# --------------------------------------------------------------------------
+
+
+def test_pre_app_telemetry_failure_still_runs_statement():
+    """A bug in DB span construction must not prevent the query executing."""
+    import tracenest.integrations.postgres.cursor as cur
+
+    tracenest.init(project_name="pre-app-1", export_batch=False)
+    calls = []
+
+    def execute(sql, *a, **k):
+        calls.append(sql)
+        return 1
+
+    original = cur._build_db_span_context
+    cur._build_db_span_context = _boom
+    try:
+        assert cur.traced_django_cursor_exec(execute, None, ("SELECT 1",), {}) == 1
+    finally:
+        cur._build_db_span_context = original
+
+    assert len(calls) == 1, "statement must execute even when span building fails"
+
+
+def test_pre_app_telemetry_failure_still_runs_execute_wrapper():
+    import tracenest.integrations.postgres.cursor as cur
+
+    tracenest.init(project_name="pre-app-2", export_batch=False)
+    calls = []
+
+    def execute(sql, params, many, context):
+        calls.append(sql)
+        return 1
+
+    class Cur:
+        rowcount = 1
+
+    original = cur._build_db_span_context
+    cur._build_db_span_context = _boom
+    try:
+        cur.tracenest_django_db_execute_wrapper(
+            execute, "SELECT 1", None, False, {"cursor": Cur(), "connection": None}
+        )
+    finally:
+        cur._build_db_span_context = original
+
+    assert len(calls) == 1
+
+
+def test_post_app_telemetry_failure_does_not_change_result():
+    """A route-resolution bug must not turn a 200 into a 500."""
+    import tracenest.integrations.django.request as req_mod
+
+    tracenest.init(project_name="post-app", export_batch=False)
+
+    class Resp:
+        status_code = 200
+
+        def __setitem__(self, k, v):
+            pass
+
+    class Req:
+        path = "/ok/"
+        method = "GET"
+        META: dict = {}
+        headers: dict = {}
+
+        def build_absolute_uri(self):
+            return "http://x/ok/"
+
+    original = req_mod._normalize_route
+    req_mod._normalize_route = _boom
+    try:
+        response = req_mod.traced_get_response(lambda *a, **k: Resp(), None, (Req(),), {})
+    finally:
+        req_mod._normalize_route = original
+
+    assert response.status_code == 200
+
+
+# --------------------------------------------------------------------------
+# Invariant #2 — application code runs exactly once
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "INSERT INTO orders (id, total) VALUES (1, 10.00)",
+        "UPDATE accounts SET balance = 0 WHERE id = 7",
+        "DELETE FROM sessions WHERE expired = 1",
+    ],
+    ids=["insert", "update", "delete"],
+)
+def test_failing_write_statement_executes_exactly_once(statement):
+    """Write statements are where an accidental retry does the most damage."""
+    from tracenest.integrations.postgres.cursor import traced_django_cursor_exec
+
+    tracenest.init(project_name="once-write", export_batch=False)
+    calls = []
+
+    def execute(sql, *a, **k):
+        calls.append(sql)
+        raise RuntimeError("statement failed")
+
+    with pytest.raises(RuntimeError, match="statement failed"):
+        traced_django_cursor_exec(execute, None, (statement,), {})
+
+    assert len(calls) == 1, f"{statement.split()[0]} executed {len(calls)} times; must run once"
+
+
+def test_failing_read_statement_executes_exactly_once():
+    from tracenest.integrations.postgres.cursor import traced_django_cursor_exec
+
+    tracenest.init(project_name="once-read", export_batch=False)
+    calls = []
+
+    def execute(sql, *a, **k):
+        calls.append(sql)
+        raise RuntimeError("connection reset")
+
+    with pytest.raises(RuntimeError, match="connection reset"):
+        traced_django_cursor_exec(execute, None, ("SELECT 1",), {})
+
+    assert len(calls) == 1
+
+
+# --------------------------------------------------------------------------
+# Invariant #3 — application exceptions propagate unchanged
+# --------------------------------------------------------------------------
+
+
+def test_application_exception_propagates_unchanged():
+    class Service:
+        calls = 0
+
+        def work(self):
+            Service.calls += 1
+            raise KeyError("app-level failure")
+
+    svc = Service()
+    integ = _FakeIntegration()
+
+    def wrapper(wrapped, instance, args, kwargs):
+        with traced_span("span.work"):
+            return wrapped(*args, **kwargs)
+
+    integ.wrap(Service, "work", wrapper)
+    try:
+        with pytest.raises(KeyError, match="app-level failure"):
+            svc.work()
+        assert Service.calls == 1
+    finally:
+        integ.unwrap_all()
+
+
+# --------------------------------------------------------------------------
+# Regression: post-application telemetry faults must not corrupt the result
+#
+# Each of these failed once: a fault after the application call returned still
+# propagated to the caller, turning a successful operation into an error.
+# --------------------------------------------------------------------------
+
+
+def test_db_rowcount_fault_preserves_successful_result():
+    """A closed/broken cursor raises on ``.rowcount``; the result must survive."""
+    from tracenest.integrations.postgres import cursor as cur
+
+    tracenest._reset_for_testing()
+    tracenest.init(project_name="rowcount-fault", disabled=True)
+
+    class ClosedCursor:
+        @property
+        def rowcount(self):
+            raise RuntimeError("cursor already closed")
+
+    calls = []
+
+    def execute(sql, params=None):
+        calls.append(sql)
+        return "RESULT"
+
+    result = cur.traced_django_cursor_exec(execute, ClosedCursor(), ("SELECT 1",), {})
+
+    assert result == "RESULT"
+    assert len(calls) == 1
+
+
+def test_requests_hooks_never_block_outbound_http():
+    """OTel calls these hooks *unguarded*; a fault must not stop the request.
+
+    ``tracenest_request_hook`` runs before ``requests.send``, so raising here
+    would block every outbound HTTP call. ``tracenest_response_hook`` runs
+    outside the instrumentor's try/except, so raising there would surface an
+    error in the app after the response had already arrived.
+    """
+    from tracenest.integrations.requests.client import (
+        tracenest_request_hook,
+        tracenest_response_hook,
+    )
+
+    tracenest._reset_for_testing()
+    tracenest.init(project_name="hook-fault", disabled=True)
+
+    class Span:
+        def set_attribute(self, key, value):
+            pass
+
+        def set_status(self, *args, **kwargs):
+            pass
+
+        def update_name(self, name):
+            pass
+
+        def is_recording(self):
+            return True
+
+    class BadRequest:
+        method = "GET"
+
+        @property
+        def url(self):
+            raise RuntimeError("url property blew up")
+
+    class BadResponse:
+        @property
+        def status_code(self):
+            raise RuntimeError("status_code blew up")
+
+    # Neither may raise: the instrumentor would not catch it.
+    tracenest_request_hook(Span(), BadRequest())
+    tracenest_response_hook(Span(), BadRequest(), BadResponse())
+
+
+# --------------------------------------------------------------------------
+# Regression: shared telemetry helpers are safe on their own
+#
+# These run *before* the application call, so a fault in a helper that is only
+# guarded at some call sites blocks the app at the others.
+# --------------------------------------------------------------------------
+
+
+def test_apply_tags_survives_config_lookup_failure():
+    from tracenest.integrations.django import view as view_mod
+
+    tracenest._reset_for_testing()
+    tracenest.init(project_name="tags-fault", disabled=True)
+
+    original = view_mod._get_config
+    view_mod._get_config = _raise_value_error
+    try:
+        calls = []
+
+        def app(*args, **kwargs):
+            calls.append(1)
+            return "RESPONSE"
+
+        request = type("Request", (), {"path": "/x/", "method": "GET"})()
+        assert view_mod.traced_get_response(app, None, (request,), {}) == "RESPONSE"
+        assert len(calls) == 1
+    finally:
+        view_mod._get_config = original
+
+
+def test_view_dispatch_survives_introspection_failure():
+    """A hostile descriptor must not prevent the view from dispatching."""
+    from tracenest.integrations.django import view as view_mod
+
+    tracenest._reset_for_testing()
+    tracenest.init(project_name="dispatch-fault", disabled=True)
+
+    class HostileView:
+        action = "get"
+
+        @property
+        def get(self):
+            raise RuntimeError("descriptor blew up")
+
+    calls = []
+
+    def dispatch(*args, **kwargs):
+        calls.append(1)
+        return "DISPATCHED"
+
+    assert view_mod.traced_view_dispatch(dispatch, HostileView(), (object(),), {}) == "DISPATCHED"
+    assert len(calls) == 1
+
+
+def _raise_value_error(*args, **kwargs):
+    raise ValueError("telemetry config lookup failed")
+
+
+def test_django_native_wrapper_rowcount_fault_preserves_result():
+    """The ``execute_wrapper`` seam gets its cursor from ``context``, not the instance."""
+    from tracenest.integrations.postgres import cursor as cur
+
+    tracenest._reset_for_testing()
+    tracenest.init(project_name="native-rowcount-fault", disabled=True)
+
+    class ClosedCursor:
+        @property
+        def rowcount(self):
+            raise RuntimeError("cursor already closed")
+
+    calls = []
+
+    def execute(sql, params, many, context):
+        calls.append(sql)
+        return "RESULT"
+
+    context = {"connection": object(), "cursor": ClosedCursor()}
+    result = cur.tracenest_django_db_execute_wrapper(
+        execute, "SELECT 1", None, False, context
+    )
+
+    assert result == "RESULT"
+    assert len(calls) == 1
+
+
+# --------------------------------------------------------------------------
+# Regression: the error path of traced_span itself
+#
+# ``traced_span``'s handler is the only thing between an application exception
+# and the caller. An unguarded telemetry call there replaces the app's
+# exception with its own — corrupting error handling on every traced span.
+# --------------------------------------------------------------------------
+
+
+def test_traced_span_preserves_app_exception_when_telemetry_fails():
+    import tracenest.tracing as tracing_mod
+
+    class HostileSpan:
+        """A span whose enrichment blows up, as a broken exporter could."""
+
+        def is_recording(self):
+            return True
+
+        def record_exception(self, exc):
+            pass
+
+        def set_status(self, *args, **kwargs):
+            pass
+
+        @property
+        def status(self):
+            return type("Status", (), {"status_code": None})()
+
+        def set_attribute(self, *args, **kwargs):
+            raise RuntimeError("telemetry blew up")
+
+    class HostileTracer:
+        def start_as_current_span(self, *args, **kwargs):
+            return self
+
+        def __enter__(self):
+            return HostileSpan()
+
+        def __exit__(self, *exc_info):
+            return False
+
+    original = tracing_mod.get_tracer
+    tracing_mod.get_tracer = lambda *a, **k: HostileTracer()
+    try:
+        with pytest.raises(KeyError, match="app-level failure"):
+            with traced_span("svc.work"):
+                raise KeyError("app-level failure")
+    finally:
+        tracing_mod.get_tracer = original

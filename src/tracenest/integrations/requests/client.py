@@ -9,6 +9,7 @@ from opentelemetry.trace import StatusCode
 from tracenest.config import SDKConfig
 from tracenest.sanitize import sanitize_url
 from tracenest.route_context import get_current_route
+from tracenest.safety import attempt
 import tracenest
 
 logger = logging.getLogger("tracenest.integrations.requests")
@@ -84,11 +85,8 @@ def _is_telemetry_request(sanitized_url: str, hostname: str, port: int) -> bool:
     return False
 
 
-def tracenest_request_hook(span: Any, request: Any) -> None:
-    """Request hook for RequestsInstrumentor to sanitize URLs and set TraceNest attributes."""
-    if span is None or not getattr(span, "is_recording", lambda: True)():
-        return
-
+def _apply_request_attributes(span: Any, request: Any) -> None:
+    """Set TraceNest attributes on an outgoing requests span. May raise."""
     method, sanitized_url, scheme, hostname, port, peer_service = _extract_request_meta(request)
     parsed = urlparse(sanitized_url)
     clean_target = f"{scheme}://{hostname}{parsed.path or ''}"
@@ -107,33 +105,53 @@ def tracenest_request_hook(span: Any, request: Any) -> None:
 
     # Tag the outgoing call with the in-flight Django endpoint so
     # per-endpoint spanmetrics series (http_route label) include it.
-    try:
-        route = get_current_route()
-        if route:
-            span.set_attribute("http.route", route)
-    except Exception:
-        pass
+    route = get_current_route()
+    if route:
+        span.set_attribute("http.route", route)
 
     if hasattr(span, "update_name"):
-        try:
-            span.update_name(f"🌐 HTTP {method} {hostname}")
-        except Exception:
-            pass
+        span.update_name(f"🌐 HTTP {method} {hostname}")
 
 
-def tracenest_response_hook(span: Any, request: Any, response: Any) -> None:
-    """Response hook for RequestsInstrumentor to set response status code and error flags."""
+def tracenest_request_hook(span: Any, request: Any) -> None:
+    """Request hook for RequestsInstrumentor to sanitize URLs and set TraceNest attributes.
+
+    OTel's requests instrumentor calls this hook *before* ``wrapped_send`` and
+    does not guard it, so a fault here would block the outgoing HTTP call
+    entirely. The whole body therefore sits behind a single guard: losing the
+    attributes is acceptable, losing the request is not.
+    """
     if span is None or not getattr(span, "is_recording", lambda: True)():
         return
 
-    status_code = getattr(response, "status_code", None)
-    if status_code is not None:
-        span.set_attribute("http.response.status_code", int(status_code))
-        span.set_attribute("http.status_code", int(status_code))
+    attempt(_apply_request_attributes, span, request, _label="request_hook")
 
-        if int(status_code) >= 400:
-            span.set_attribute("error", True)
-            span.set_attribute("error.type", f"HTTP{status_code}")
-            span.set_status(StatusCode.ERROR, description=f"HTTP {status_code}")
+
+def _apply_response_attributes(span: Any, response: Any) -> None:
+    """Set status and error attributes on a requests span. May raise."""
+    status_code = getattr(response, "status_code", None)
+    if status_code is None:
+        return
+
+    status_code = int(status_code)
+    span.set_attribute("http.response.status_code", status_code)
+    span.set_attribute("http.status_code", status_code)
+
+    if status_code >= 400:
+        span.set_attribute("error", True)
+        span.set_attribute("error.type", f"HTTP{status_code}")
+        span.set_status(StatusCode.ERROR, description=f"HTTP {status_code}")
+
+
+def tracenest_response_hook(span: Any, request: Any, response: Any) -> None:
+    """Response hook for RequestsInstrumentor to set response status code and error flags.
+
+    The instrumentor calls this outside its own try/except, so a fault here
+    would raise in the application *after* the request already succeeded.
+    """
+    if span is None or not getattr(span, "is_recording", lambda: True)():
+        return
+
+    attempt(_apply_response_attributes, span, response, _label="response_hook")
 
 

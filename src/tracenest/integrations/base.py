@@ -50,8 +50,17 @@ class BaseIntegration(abc.ABC):
     ) -> None:
         """
         Safely wraps a function/method while tracking original for clean uninstrumentation.
-        Guarantees that any internal SDK failure will never crash the wrapped host method.
-        
+
+        Guarantees that any internal SDK failure will never crash the wrapped host
+        method. Telemetry failures are absorbed at their source -- :func:`traced_span`
+        degrades to a no-op span when the TracerProvider is unusable, and span
+        enrichment is individually guarded -- so an exception escaping ``wrapper`` is
+        the application's own and MUST be propagated.
+
+        This wrapper deliberately does not retry the call. The wrapped method may
+        already have run, and re-invoking it would execute application code twice
+        (duplicate writes, repeated outbound requests).
+
         Args:
             target: Either an imported class/module object or a fully-qualified string (e.g. 'django.views.View')
             attribute_name: Name of the method/attribute to wrap
@@ -61,6 +70,8 @@ class BaseIntegration(abc.ABC):
             try:
                 return wrapper(wrapped_fn, instance, args, kwargs)
             except Exception as exc:
+                # Log and re-raise. The host application's exception is not ours to
+                # swallow, and retrying here would execute the wrapped call twice.
                 logger.debug(
                     "TraceNest internal wrapper error on %s.%s: %s",
                     target,
@@ -68,7 +79,7 @@ class BaseIntegration(abc.ABC):
                     exc,
                     exc_info=True,
                 )
-                return wrapped_fn(*args, **kwargs)
+                raise
 
         try:
             if isinstance(target, str):
