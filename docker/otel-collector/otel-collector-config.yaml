@@ -35,21 +35,6 @@ processors:
     send_batch_size: 256
     send_batch_max_size: 512
 
-  tail_sampling:
-    decision_wait: 2s
-    num_traces: 10000
-    expected_new_traces_per_sec: 2000
-    policies:
-      - name: keep_errors
-        type: status_code
-        status_code: { status_codes: [ ERROR ] }
-      - name: keep_slow_traces
-        type: latency
-        latency: { threshold_ms: 500 }
-      - name: sample_healthy_traces
-        type: probabilistic
-        probabilistic: { sampling_percentage: 10.0 }
-
 connectors:
   spanmetrics:
     histogram:
@@ -87,9 +72,14 @@ exporters:
 
 service:
   pipelines:
+    # Head-based sampling happens in the SDK (tracenest.sampler), not here.
+    # Tail sampling is deliberately NOT in front of spanmetrics: it would keep
+    # 100% of errors and slow traces while thinning healthy ones, inflating
+    # the error rate and skewing latency percentiles. spanmetrics must see the
+    # full, unbiased population.
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, tail_sampling, batch]
+      processors: [memory_limiter, batch]
       exporters: [otlp/tempo, spanmetrics]
     metrics:
       receivers: [otlp, spanmetrics, postgresql]
