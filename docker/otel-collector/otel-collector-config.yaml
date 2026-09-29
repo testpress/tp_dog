@@ -35,6 +35,19 @@ processors:
     send_batch_size: 256
     send_batch_max_size: 512
 
+  # Drop health checks and other known noise.
+  # Runs BEFORE batch so dropped spans never enter a batch payload.
+  filter/noise:
+    error_mode: ignore
+    traces:
+      span:
+        - 'name == "GET /healthz"'
+        - 'name == "GET /readyz"'
+        - 'name == "/healthz"'
+        - 'name == "/readyz"'
+        - 'attributes["http.route"] == "/healthz"'
+        - 'attributes["http.route"] == "/readyz"'
+
 connectors:
   spanmetrics:
     histogram:
@@ -77,10 +90,13 @@ service:
     # 100% of errors and slow traces while thinning healthy ones, inflating
     # the error rate and skewing latency percentiles. spanmetrics must see the
     # full, unbiased population.
+    #
+    # Order matters: drop noise first, then batch.
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, filter/noise, resource/drop_ephemeral, batch]
       exporters: [otlp/tempo, spanmetrics]
+
     metrics:
       receivers: [otlp, spanmetrics, postgresql]
       processors: [memory_limiter, resource/drop_ephemeral, batch]
