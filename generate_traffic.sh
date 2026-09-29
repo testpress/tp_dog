@@ -423,58 +423,45 @@ run_traffic_cycle() {
   fi
 
   # =========================================================================
-  # Standard Full Traffic Cycle (All services and databases)
+  # Standard Full Traffic Cycle (Balanced across all services and tiers)
   # =========================================================================
   if [ "$RUN_ALL" -eq 1 ] || [ "$SERVICE_PRODUCT" -eq 1 ] || [ "$SERVICE_REDIS" -eq 0 ] && [ "$SERVICE_HTTP" -eq 0 ] && [ "$SERVICE_TEMPLATE" -eq 0 ] && [ "$SERVICE_SQL" -eq 0 ] && [ "$SERVICE_THROTTLE" -eq 0 ] && [ "$SERVICE_ERROR" -eq 0 ]; then
-    # 1. Standard Products List & Detail (Postgres default via PgBouncer)
-    send_req "GET" "/api/products/" "" "Postgres Primary (PgBouncer): List Products"
-    send_req "GET" "/api/products/1/" "" "Postgres Primary (PgBouncer): Product Detail #1"
+    # 1. Django Web & Core Framework Tier
+    send_req "GET" "/api/products/" "" "Django Web: List Products (Core Handler)"
+    send_req "GET" "/api/products/1/" "" "Django Web: Product Detail #1"
+    send_req "GET" "/api/products-tmpl/" "" "Django Web: Template Rendering Waterfall"
+    send_req "GET" "/api/threaded/?threads=2&delay=0.02" "" "Django Web: Multi-Threaded Task"
 
-    # 2. Database Read Replicas (Postgres Slaves 1, 2, 3 - slave1 via PgBouncer)
-    send_req "GET" "/api/products/read-slave1/" "" "Postgres Replica 1 (PgBouncer) query"
-    send_req "GET" "/api/products/read-slave2/" "" "Postgres Replica 2 (Direct) query"
-    send_req "GET" "/api/products/read-slave3/" "" "Postgres Replica 3 (Direct) query"
+    # 2. PostgreSQL Primary (default) & PgBouncer Connection Pooler
+    send_req "GET" "/api/multi-db/?db=default" "" "Postgres Primary: Direct SELECT Query"
+    send_req "POST" "/api/products/1/adjust_stock/" "{\"delta\": -1}" "PgBouncer: Stock Adjustment on Primary"
+    send_req "POST" "/api/db-tx/" "{\"operations\": 2}" "PgBouncer: 2-Statement Transaction"
 
-    # 3. Redis Cache operations & Health Check (Cache hit/miss + DBs & Redis)
-    send_req "GET" "/api/products/cache/" "" "Redis: Cache Get/Set"
-    send_req "GET" "/api/cache-stats/" "" "Redis: Cache Backend Stats"
-    send_req "GET" "/api/products/redis-slow/?delay=0.08" "" "Redis: Keys Scan & Latency Benchmark"
-    send_req "GET" "/api/products/health/" "" "Full Health Check: All 4 Postgres DBs + Redis"
+    # 3. PostgreSQL Read Replicas (Evenly Distributed Across Slaves 1, 2, 3)
+    send_req "GET" "/api/products/read-slave1/" "" "Postgres Replica 1 (slave1 via PgBouncer)"
+    send_req "GET" "/api/products/read-slave2/" "" "Postgres Replica 2 (slave2 Direct - No PgBouncer)"
+    send_req "GET" "/api/products/read-slave3/" "" "Postgres Replica 3 (slave3 Direct - No PgBouncer)"
 
-    # 4. Outgoing HTTP Downstream Call & Cloud Storage (requests & boto tracing)
-    # send_req "GET" "/api/products/external/" "" "HTTP Client: Requests Package External Call"
-    send_req "GET" "/api/s3-storage/" "" "Cloud Storage (Boto/S3): List Objects"
+    # 4. PostgreSQL Replica Writes (Evenly Distributed)
+    send_req "POST" "/api/products/write-slave1/" "{\"name\": \"Item-Slave1-$rnd\", \"price\": \"19.99\", \"stock\": 15}" "Postgres Slave 1: Write Record"
+    send_req "POST" "/api/products/write-slave2/" "{\"name\": \"Item-Slave2-$rnd\", \"price\": \"39.99\", \"stock\": 30}" "Postgres Slave 2: Direct Write (No PgBouncer)"
+    send_req "POST" "/api/products/write-slave3/" "{\"name\": \"Item-Slave3-$rnd\", \"price\": \"89.99\", \"stock\": 45}" "Postgres Slave 3: Direct Write (No PgBouncer)"
 
-    # 5. POST Operations & Transactions (Primary + Replicas)
-    send_req "POST" "/api/products/" "{\"name\": \"Widget-$rnd\", \"description\": \"Auto-generated product $rnd\", \"price\": \"$((rnd % 50 + 5)).99\", \"stock\": $((rnd % 200 + 1))}" "Postgres Primary: Create Product"
-    send_req "POST" "/api/products/bulk_create/" "[{\"name\":\"BulkA-$rnd\",\"price\":\"12.50\",\"stock\":10},{\"name\":\"BulkB-$rnd\",\"price\":\"25.00\",\"stock\":20}]" "Postgres Primary: Bulk Create (Atomic)"
-    send_req "POST" "/api/products/1/adjust_stock/" "{\"delta\": -1}" "Postgres Primary: Atomic Stock Adjustment"
-    send_req "POST" "/api/db-tx/" "{\"operations\": 3}" "Postgres Primary: Multi-Statement DB Tx"
+    # 5. Redis Cache Tier (Fast, Clean Operations - No Blocking Lua Scripts)
+    send_req "GET" "/api/products/cache/" "" "Redis Cache: Get/Set Products Cache"
+    send_req "GET" "/api/cache-stats/" "" "Redis Cache: Metadata & Key Statistics"
+    send_req "GET" "/api/products/health/" "" "Infrastructure Health: All 4 Postgres DBs + Redis"
 
-    # 6. Direct Database Writes to Replicas (Postgres Slave 1, 2, 3)
-    send_req "POST" "/api/products/write-slave1/" "{\"name\": \"Item-Slave1-$rnd\", \"price\": \"19.99\", \"stock\": 15}" "Postgres Slave 1: Direct Write"
-    send_req "POST" "/api/products/write-slave2/" "{\"name\": \"Item-Slave2-$rnd\", \"price\": \"39.99\", \"stock\": 30}" "Postgres Slave 2: Direct Write"
-    send_req "POST" "/api/products/write-slave3/" "{\"name\": \"Item-Slave3-$rnd\", \"price\": \"89.99\", \"stock\": 45}" "Postgres Slave 3: Direct Write"
+    # 6. Cloud Storage & Downstream
+    send_req "GET" "/api/s3-storage/" "" "Cloud Storage (Boto/S3): List Bucket Objects"
 
-    # 7. Cross-Database Synchronization & Multi-DB Stock Transfer
-    send_req "POST" "/api/products/sync-all-dbs/" "{\"name\": \"Synced-$rnd\", \"price\": \"99.00\", \"stock\": 100}" "Multi-DB: Sync Across All 4 Databases"
-    send_req "POST" "/api/products/multi-db-transfer/" "{\"amount\": 3}" "Multi-DB: Cross-DB Stock Transfer & Audit"
-    send_req "POST" "/api/multi-db/?db=slave1&action=update" "" "Raw SQL: Direct UPDATE on Slave1"
-    send_req "POST" "/api/multi-db/?db=slave2&action=insert" "" "Raw SQL: Direct INSERT on Slave2"
-
-    # 8. Rate Throttling Burst (Send 6 quick requests to trigger 429)
-    echo -e "   ${C_BLUE}⚡ Triggering 429 Rate Throttling Burst (6 reqs)...${C_RESET}"
-    for i in {1..6}; do
-      send_req "GET" "/api/products/throttled/" "" "Throttled Endpoint (Call $i/6)"
-    done
-
-    # 9. Deliberate Errors (500 Server Error & Multi-part Template Error)
-    send_req "GET" "/api/products/error/" "" "500 Error: RuntimeError for Tracing"
-    send_req "GET" "/api/template-error/" "" "500 Error: Multi-part Template Crash"
-
-    # 10. Django Framework Template Rendering & Multi-Threaded Processing
-    send_req "GET" "/api/products-tmpl/" "" "Django: HTML Template Rendering Waterfall"
-    send_req "GET" "/api/threaded/?threads=2&delay=0.04" "" "Django: Parallel Multi-Threaded Workload"
+    # 7. Balanced Error & Throttling (Realistic 2-5% rate instead of constant spam)
+    if [ $((cycle_num % 5)) -eq 0 ]; then
+      send_req "GET" "/api/products/throttled/" "" "Rate Throttling: Occasional 429 Test Probe"
+    fi
+    if [ $((cycle_num % 10)) -eq 0 ]; then
+      send_req "GET" "/api/products/error/" "" "Server Error: Occasional 500 Test Probe"
+    fi
   fi
 
   # Template endpoints

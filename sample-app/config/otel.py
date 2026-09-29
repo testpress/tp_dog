@@ -42,7 +42,6 @@ def setup_telemetry():
             endpoint_sample_rules={
                 "/api/s3-storage/": 1.0,
             },
-            sample_errors=True,
         )
         logger.info("TraceNest initialized with auto-patching")
         return True

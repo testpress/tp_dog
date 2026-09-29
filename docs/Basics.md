@@ -181,7 +181,6 @@ High-throughput systems generate millions of spans per second. Storing 100% of t
 
 - **Head-Based Sampling**: The sampling decision is made at the beginning of the trace (when the root span starts) based on rules or probability (e.g. sample 10% of requests via `TraceIdRatioBased(0.10)`).
 - **Parent-Based Sampling**: Respects the sampling decision made by the upstream caller in the `traceparent` header.
-- **Tail-Based Sampling**: The decision is made after the trace completes (typically in the OTel Collector), allowing 100% capture of errors and slow requests while discarding unremarkable 200 OK fast requests.
 
 ---
 

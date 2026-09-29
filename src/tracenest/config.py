@@ -113,7 +113,6 @@ class SDKConfig:
     on_request_span: Optional[Callable] = None
     ignore_endpoints: List[str] = field(default_factory=list)
     endpoint_sample_rules: Dict[str, float] = field(default_factory=dict)
-    sample_errors: bool = True  # Retained for config parity; error retention is enforced via collector tail-sampling
     trusted_proxies: List[str] = field(default_factory=list)
     db_role_map: Dict[str, str] = field(default_factory=dict)
 
@@ -302,7 +301,7 @@ class SDKConfig:
             "template_enabled", "template_exclude", "db_two_tier_spans", "tags",
             "on_request_span", "ignore_endpoints", "IGNORE_ENDPOINTS",
             "endpoint_sample_rules", "endpoint_rules", "sample_rules", "ENDPOINT_SAMPLE_RULES",
-            "sample_errors", "service", "service_name", "cluster",
+            "service", "service_name", "cluster",
             "db_role_map", "DB_ROLE_MAP", "trusted_proxies", "TRUSTED_PROXIES",
             "cache_enabled", "CACHE_ENABLED",
         }
@@ -342,12 +341,6 @@ class SDKConfig:
                         pass
         else:
             resolved_rules = {}
-
-        kwarg_sample_errors = extra.get("sample_errors")
-        if kwarg_sample_errors is not None:
-            resolved_sample_errors = bool(kwarg_sample_errors)
-        else:
-            resolved_sample_errors = _str_to_bool(os.getenv("TRACENEST_SAMPLE_ERRORS", "true"), default=True)
 
         kwarg_proxies = extra.get("trusted_proxies") or extra.get("TRUSTED_PROXIES")
         if kwarg_proxies is not None:
@@ -395,7 +388,6 @@ class SDKConfig:
             on_request_span=resolved_on_request_span,
             ignore_endpoints=resolved_ignores,
             endpoint_sample_rules=resolved_rules,
-            sample_errors=resolved_sample_errors,
             trusted_proxies=resolved_trusted_proxies,
             db_role_map=resolved_db_role_map,
         )

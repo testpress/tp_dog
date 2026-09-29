@@ -55,28 +55,24 @@ def test_endpoint_sample_rules_custom_ratios():
 
 
 def test_config_resolves_sampling_kwargs_and_env(monkeypatch):
-    """Verify SDKConfig properly resolves ignore_endpoints, endpoint_sample_rules, and sample_errors."""
+    """Verify SDKConfig properly resolves ignore endpoints and endpoint sampling rules."""
     cfg = SDKConfig.from_env_and_kwargs(
         project_name="test-service",
         sample_rate=0.1,
         ignore_endpoints=["/ping", "/readyz"],
         endpoint_sample_rules={"/api/vip/*": 1.0},
-        sample_errors=False,
     )
     assert cfg.sample_rate == 0.1
     assert cfg.ignore_endpoints == ["/ping", "/readyz"]
     assert cfg.endpoint_sample_rules == {"/api/vip/*": 1.0}
-    assert cfg.sample_errors is False
 
     # Test environment variable resolution
     monkeypatch.setenv("TRACENEST_IGNORE_ENDPOINTS", "/health,/metrics")
     monkeypatch.setenv("TRACENEST_ENDPOINT_SAMPLE_RULES", "/api/checkout/*=1.0,/api/search/*=0.5")
-    monkeypatch.setenv("TRACENEST_SAMPLE_ERRORS", "true")
 
     cfg_env = SDKConfig.from_env_and_kwargs()
     assert cfg_env.ignore_endpoints == ["/health", "/metrics"]
     assert cfg_env.endpoint_sample_rules == {"/api/checkout/*": 1.0, "/api/search/*": 0.5}
-    assert cfg_env.sample_errors is True
 
 
 def test_create_tracenest_sampler():
@@ -132,4 +128,3 @@ def test_parameterized_route_template_matching():
         },
     )
     assert res3.decision == Decision.DROP
-

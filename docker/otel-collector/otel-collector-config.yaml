@@ -5,68 +5,86 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
-
   postgresql:
     endpoint: postgres:5432
     transport: tcp
     username: django
     password: django
     databases:
-      - django_otel
+    - django_otel
     tls:
       insecure: true
     collection_interval: 10s
-
 processors:
   memory_limiter:
     check_interval: 500ms
     limit_mib: 280
     spike_limit_mib: 50
-
   resource/drop_ephemeral:
     attributes:
-      - key: service.instance.id
-        action: delete
-      - key: process.pid
-        action: delete
-
+    - key: service.instance.id
+      action: delete
+    - key: process.pid
+      action: delete
   batch:
     timeout: 500ms
     send_batch_size: 256
     send_batch_max_size: 512
-
-  # Drop health checks and other known noise.
-  # Runs BEFORE batch so dropped spans never enter a batch payload.
   filter/noise:
     error_mode: ignore
     traces:
       span:
-        - 'name == "GET /healthz"'
-        - 'name == "GET /readyz"'
-        - 'name == "/healthz"'
-        - 'name == "/readyz"'
-        - 'attributes["http.route"] == "/healthz"'
-        - 'attributes["http.route"] == "/readyz"'
-
+      - name == "GET /healthz"
+      - name == "GET /readyz"
+      - name == "/healthz"
+      - name == "/readyz"
+      - attributes["http.route"] == "/healthz"
+      - attributes["http.route"] == "/readyz"
+  transform/normalize:
+    error_mode: ignore
+    trace_statements:
+    - context: span
+      statements:
+      - set(attributes["normalized.service"], attributes["peer.service"]) where attributes["peer.service"] != nil
+      - set(attributes["normalized.service"], attributes["messaging.system"]) where attributes["normalized.service"] == nil and attributes["messaging.system"] != nil
+      - set(attributes["normalized.service"], attributes["rpc.system"]) where attributes["normalized.service"] == nil and attributes["rpc.system"] != nil
+      - set(attributes["normalized.service"], attributes["db.system"]) where attributes["normalized.service"] == nil and attributes["db.system"] != nil
+      - set(attributes["normalized.service"], attributes["component"]) where attributes["normalized.service"] == nil and attributes["component"] != nil and attributes["component"] != "django"
+      - set(attributes["normalized.service"], "django") where attributes["normalized.service"] == nil
+      - set(attributes["normalized.operation"], Concat([attributes["http.method"], attributes["http.route"]], " ")) where attributes["http.route"] != nil
+      - set(attributes["normalized.operation"], attributes["db.statement"]) where attributes["db.statement"] != nil
+      - set(attributes["normalized.operation"], name) where attributes["normalized.operation"] == nil
 connectors:
   spanmetrics:
     histogram:
       explicit:
-        buckets: [2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s]
+        buckets:
+        - 2ms
+        - 5ms
+        - 10ms
+        - 25ms
+        - 50ms
+        - 100ms
+        - 250ms
+        - 500ms
+        - 1s
+        - 2.5s
+        - 5s
     dimensions:
-      - name: http.method
-      - name: http.status_code
-      - name: http.route
-      - name: db.system
-      - name: db.operation
-      - name: db.statement
-      - name: db.instance
-      - name: server.address
-      - name: server.port
-      - name: error
-      - name: span.type
+    - name: http.method
+    - name: http.status_code
+    - name: http.route
+    - name: db.system
+    - name: db.operation
+    - name: db.statement
+    - name: db.instance
+    - name: server.address
+    - name: server.port
+    - name: error
+    - name: span.type
+    - name: normalized.service
+    - name: normalized.operation
     dimensions_cache_size: 5000
-
 exporters:
   otlp/tempo:
     endpoint: tempo:4317
@@ -76,32 +94,36 @@ exporters:
       enabled: true
       num_consumers: 8
       queue_size: 1000
-
   prometheus:
     endpoint: 0.0.0.0:8889
     namespace: apm
     resource_to_telemetry_conversion:
       enabled: true
-
 service:
   pipelines:
-    # Head-based sampling happens in the SDK (tracenest.sampler), not here.
-    # Tail sampling is deliberately NOT in front of spanmetrics: it would keep
-    # 100% of errors and slow traces while thinning healthy ones, inflating
-    # the error rate and skewing latency percentiles. spanmetrics must see the
-    # full, unbiased population.
-    #
-    # Order matters: drop noise first, then batch.
     traces:
-      receivers: [otlp]
-      processors: [memory_limiter, filter/noise, resource/drop_ephemeral, batch]
-      exporters: [otlp/tempo, spanmetrics]
-
+      receivers:
+      - otlp
+      processors:
+      - memory_limiter
+      - filter/noise
+      - resource/drop_ephemeral
+      - transform/normalize
+      - batch
+      exporters:
+      - otlp/tempo
+      - spanmetrics
     metrics:
-      receivers: [otlp, spanmetrics, postgresql]
-      processors: [memory_limiter, resource/drop_ephemeral, batch]
-      exporters: [prometheus]
-
+      receivers:
+      - otlp
+      - spanmetrics
+      - postgresql
+      processors:
+      - memory_limiter
+      - resource/drop_ephemeral
+      - batch
+      exporters:
+      - prometheus
   telemetry:
     logs:
       level: info

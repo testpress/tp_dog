@@ -515,22 +515,9 @@ The PoC supports sampling strategies such as:
 
 Sampling is deliberately **head-based only**, applied in the SDK (`tracenest.sampler`).
 
-The Collector pipeline does **not** use the `tail_sampling` processor. Tail sampling keeps 100% of error and slow traces while thinning healthy ones, so placing it in front of the `spanmetrics` connector produces a biased population: the reported error rate inflates by roughly the sampling ratio and latency percentiles skew high. `spanmetrics` must observe every span to emit trustworthy RED metrics.
-
-If trace storage volume later requires sampling, it must be added as a **second pipeline** that feeds only the trace backend, leaving a separate pre-sampling pipeline to feed `spanmetrics`:
-
-```yaml
-traces/spanmetrics:              # full population -> correct metrics
-  receivers: [otlp]
-  processors: [memory_limiter, batch]
-  exporters: [spanmetrics]
-traces/sampled:                 # sampled -> cheap storage
-  receivers: [otlp]
-  processors: [memory_limiter, tail_sampling, batch]
-  exporters: [otlp/tempo]
-```
-
-Production sampling rates and error-preserving strategies still require additional validation.
+The Collector receives the SDK's sampled trace population, derives RED metrics
+from it, and writes it to Tempo. Configure the head sample rate per service
+with `TRACENEST_SAMPLE_RATE` when storage capacity requires it.
 
 ---
 
