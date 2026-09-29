@@ -431,3 +431,70 @@ def test_traced_span_preserves_app_exception_when_telemetry_fails():
                 raise KeyError("app-level failure")
     finally:
         tracing_mod.get_tracer = original
+
+
+def test_sanitize_sql_dollar_quoted_strings():
+    from tracenest.sanitize import sanitize_sql
+    assert sanitize_sql("SELECT $$alice@example.com$$") == "SELECT ?"
+    assert sanitize_sql("SELECT $tag$super_secret$tag$ FROM table") == "SELECT ? FROM table"
+    # Unclosed dollar quote fails closed
+    assert sanitize_sql("SELECT $$unclosed string") == "<unparseable-sql>"
+    assert sanitize_sql("SELECT $tag$unclosed string") == "<unparseable-sql>"
+
+
+def test_sanitize_url_fail_closed():
+    from tracenest.sanitize import sanitize_url
+    # Normal url sanitize strips sensitive query param
+    assert "token=REDACTED" in sanitize_url("https://api.example.com/v1?token=secret123")
+
+    # Broken unparseable URL should fail closed and not leak query strings
+    class MalformedURL:
+        def __str__(self):
+            return "https://example.com/path?token=secret#hash"
+
+    # Mock urlparse raising an exception
+    import urllib.parse
+    orig = urllib.parse.urlparse
+    urllib.parse.urlparse = lambda *a, **k: (_ for _ in ()).throw(ValueError("malformed URL"))
+    try:
+        sanitized = sanitize_url(MalformedURL())
+        assert "secret" not in sanitized
+        assert sanitized == "https://example.com/path"
+    finally:
+        urllib.parse.urlparse = orig
+
+
+def test_normalize_sql_for_metric_collapses_in_clauses():
+    from tracenest.sanitize import normalize_sql_for_metric
+
+    q1 = "SELECT * FROM users WHERE id IN (%s, %s, %s, %s)"
+    assert normalize_sql_for_metric(q1) == "SELECT * FROM users WHERE id IN (?)"
+
+    q2 = "SELECT * FROM orders WHERE status NOT IN (?, ?, ?)"
+    assert normalize_sql_for_metric(q2) == "SELECT * FROM orders WHERE status NOT IN (?)"
+
+
+def test_normalize_sql_for_metric_collapses_batch_inserts():
+    from tracenest.sanitize import normalize_sql_for_metric
+
+    q = "INSERT INTO products (name, price) VALUES (%s, %s), (%s, %s), (%s, %s)"
+    assert normalize_sql_for_metric(q) == "INSERT INTO products (name, price) VALUES (...)"
+
+
+def test_normalize_sql_for_metric_strips_comments():
+    from tracenest.sanitize import normalize_sql_for_metric
+
+    q = "SELECT /* route:api/users */ id, name FROM users WHERE id = %s"
+    assert normalize_sql_for_metric(q) == "SELECT id, name FROM users WHERE id = %s"
+
+
+def test_normalize_sql_for_metric_bounds_length():
+    from tracenest.sanitize import normalize_sql_for_metric
+
+    columns = ", ".join([f'"col_{i}"' for i in range(100)])
+    long_query = f"SELECT {columns} FROM my_very_large_table WHERE id = %s"
+    result = normalize_sql_for_metric(long_query, max_length=256)
+    assert len(result) <= 256
+    assert result.endswith("...")
+
+

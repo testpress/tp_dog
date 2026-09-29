@@ -7,6 +7,7 @@ TraceNest is an OpenTelemetry-based observability SDK for synchronous Django app
 For a comprehensive overview of the architecture, components, workflows, and decision log, see:
 
 - [**TraceNest Observability PoC Overview**](docs/Overview.md) — Complete end-to-end technical overview, architecture, component breakdown, resource usage benchmarks, and decision index.
+- [**Operations Runbook**](docs/Runbook.md) — On-call operational guide, 6 essential questions with single-line answers, emergency killswitches, and collector diagnostics.
 
 ---
 

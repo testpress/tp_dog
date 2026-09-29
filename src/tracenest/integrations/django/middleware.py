@@ -6,7 +6,6 @@ Produces exact Datadog APM waterfall hierarchy:
   - (downstream middleware chain / view)
   - <module>.<MiddlewareClass>.process_response
 """
-import inspect
 import logging
 from typing import Any, Callable, Optional
 
@@ -28,7 +27,10 @@ def set_config(config: Optional[SDKConfig]) -> None:
 
 
 def _get_config() -> Optional[SDKConfig]:
-    return _config if _config is not None else tracenest.get_config()
+    """Return the config received through the integration seam, or active config."""
+    if _config is not None:
+        return _config
+    return getattr(tracenest, "_ACTIVE_CONFIG", None)
 
 _HOOK_METHODS = (
     "__call__",
@@ -58,19 +60,8 @@ def _make_hook_wrapper(mw_path: str, mw_short: str, method_name: str):
         if cfg and cfg.tags:
             attempt(lambda: attrs.update(cfg.tags), _label="merge_tags")
 
-        # Async middleware hooks return a coroutine that Django awaits after our
-        # wrapper returns. Wrap them in an async wrapper so the span covers the
-        # actual await instead of closing at ~0ms.
-        if inspect.iscoroutinefunction(wrapped_call):
-            async def _async_traced(*aa, **kk):
-                with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=attrs, tracer_name="tracenest.django"):
-                    return await wrapped_call(*aa, **kk)
-
-            return _async_traced(*a, **k)
-
         with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=attrs, tracer_name="tracenest.django"):
-            resp = wrapped_call(*a, **k)
-            return resp
+            return wrapped_call(*a, **k)
 
     return _wrapper
 

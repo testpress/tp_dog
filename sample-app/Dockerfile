@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libc-dev \
   && rm -rf /var/lib/apt/lists/*
 
-# tp_obs_v3 SDK (editable install from repo root build context)
+# tracenest SDK (editable install from repo root build context)
 COPY pyproject.toml .
 COPY src/ ./src/
 

@@ -24,8 +24,10 @@ def set_config(config: Optional[SDKConfig]) -> None:
 
 
 def _get_config() -> Optional[SDKConfig]:
-    """Return the config received through the integration seam, or global fallback."""
-    return _config if _config is not None else tracenest.get_config()
+    """Return the config received through the integration seam, or active config."""
+    if _config is not None:
+        return _config
+    return getattr(tracenest, "_ACTIVE_CONFIG", None)
 
 
 def _extract_request_meta(request: Any) -> Tuple[str, str, str, str, int, str]:
@@ -57,32 +59,6 @@ def _extract_request_meta(request: Any) -> Tuple[str, str, str, str, int, str]:
     peer_service = hostname
     return method, sanitized, scheme, hostname, port, peer_service
 
-
-def _is_telemetry_request(sanitized_url: str, hostname: str, port: int) -> bool:
-    """Check if the outgoing HTTP request is an OTLP export call.
-
-    Deliberately conservative: telemetry detection is based on the collector's
-    host/port only, never on the URL path. Otherwise any third-party API whose
-    path contains /v1/traces (or similar) would be mistaken for the collector
-    and its real response replaced with a fabricated 503.
-    """
-    if "otel-collector" in hostname or "tp-otel-collector" in hostname:
-        return True
-    if port in (4317, 4318) and hostname in ("localhost", "127.0.0.1", "0.0.0.0"):
-        return True
-
-    # Check against active TraceNest configuration
-    try:
-        cfg = _get_config()
-        if cfg:
-            if cfg.traces_endpoint and cfg.traces_endpoint in sanitized_url:
-                return True
-            if cfg.endpoint and cfg.endpoint in sanitized_url:
-                return True
-    except Exception:
-        pass
-
-    return False
 
 
 def _apply_request_attributes(span: Any, request: Any) -> None:

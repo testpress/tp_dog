@@ -12,7 +12,6 @@ import tracenest
 from tracenest.integrations.requests import RequestsIntegration
 from tracenest.integrations.requests.client import (
     _extract_request_meta,
-    _is_telemetry_request,
     tracenest_request_hook,
     tracenest_response_hook,
 )
@@ -134,10 +133,6 @@ def test_requests_integration_lifecycle(memory_exporter):
 
     integ.uninstrument()
 
-
-def test_is_telemetry_request():
-    assert _is_telemetry_request("http://tp-otel-collector:4318/v1/traces", "tp-otel-collector", 4318) is True
-    assert _is_telemetry_request("https://api.stripe.com/v1/charges", "api.stripe.com", 443) is False
 
 
 def test_requests_integration_manager_registration():

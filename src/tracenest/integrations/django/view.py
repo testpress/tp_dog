@@ -1,8 +1,8 @@
 """View span — wraps BaseHandler._get_response, View.dispatch, and resolves view name/route."""
 
 import functools
-import inspect
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
@@ -16,6 +16,7 @@ import tracenest
 from .request import _normalize_route, _resolve_view_name
 
 _config: Optional[SDKConfig] = None
+_in_view_dispatch: ContextVar[bool] = ContextVar("in_view_dispatch", default=False)
 
 
 def set_config(config: Optional[SDKConfig]) -> None:
@@ -24,7 +25,10 @@ def set_config(config: Optional[SDKConfig]) -> None:
 
 
 def _get_config() -> Optional[SDKConfig]:
-    return _config if _config is not None else tracenest.get_config()
+    """Return the config received through the integration seam, or active config."""
+    if _config is not None:
+        return _config
+    return getattr(tracenest, "_ACTIVE_CONFIG", None)
 
 
 def _apply_tags(span):
@@ -202,63 +206,60 @@ def _build_dispatch_plan(instance: Any, wrapped: Callable, args: Any, kwargs: An
 
 
 def traced_view_dispatch(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
-    # Planning is a single guarded phase: a failure anywhere in it falls back to
-    # a plain dispatch rather than partially instrumenting the view.
-    plan = attempt(
-        _build_dispatch_plan, instance, wrapped, args, kwargs, default=UNTRACED, _label="dispatch_plan"
-    )
-    if plan is UNTRACED:
+    if _in_view_dispatch.get():
         return wrapped(*args, **kwargs)
 
-    with traced_span(plan.span_name, kind=SpanKind.INTERNAL, attributes=plan.attrs, tracer_name="tracenest.django") as dispatch_span:
-        _apply_tags(dispatch_span)
-        if plan.action:
-            safe_set_attribute(dispatch_span, "django.view.action", str(plan.action))
+    token = _in_view_dispatch.set(True)
+    try:
+        # Planning is a single guarded phase: a failure anywhere in it falls back to
+        # a plain dispatch rather than partially instrumenting the view.
+        plan = attempt(
+            _build_dispatch_plan, instance, wrapped, args, kwargs, default=UNTRACED, _label="dispatch_plan"
+        )
+        if plan is UNTRACED:
+            return wrapped(*args, **kwargs)
 
-        handler = plan.handler
-        if handler is None:
-            res = wrapped(*args, **kwargs)
-            attempt(_bind_response_parent, res, _label="bind_response_parent")
-            return res
+        with traced_span(plan.span_name, kind=SpanKind.INTERNAL, attributes=plan.attrs, tracer_name="tracenest.django") as dispatch_span:
+            _apply_tags(dispatch_span)
+            if plan.action:
+                safe_set_attribute(dispatch_span, "django.view.action", str(plan.action))
 
-        handler_span_name = plan.handler_span_name
-        handler_attrs = plan.handler_attrs
-        handler_method = plan.handler_method
-        method = plan.method
+            handler = plan.handler
+            if handler is None:
+                res = wrapped(*args, **kwargs)
+                attempt(_bind_response_parent, res, _label="bind_response_parent")
+                return res
 
-        # Async handlers (async def get/post) return a coroutine that Django
-        # awaits after dispatch returns. Guard with an async wrapper so the
-        # handler span covers the actual execution instead of closing at ~0ms.
-        if inspect.iscoroutinefunction(handler):
-            async def _traced_handler(*h_args, **h_kwargs):
-                with traced_span(handler_span_name, kind=SpanKind.INTERNAL, attributes=handler_attrs, tracer_name="tracenest.django") as h_span:
-                    h_res = await handler(*h_args, **h_kwargs)
-                    attempt(_bind_response_parent, h_res, _label="bind_response_parent")
-                    return h_res
-        else:
+            handler_span_name = plan.handler_span_name
+            handler_attrs = plan.handler_attrs
+            handler_method = plan.handler_method
+            method = plan.method
+
             def _traced_handler(*h_args, **h_kwargs):
                 with traced_span(handler_span_name, kind=SpanKind.INTERNAL, attributes=handler_attrs, tracer_name="tracenest.django") as h_span:
                     h_res = handler(*h_args, **h_kwargs)
                     attempt(_bind_response_parent, h_res, _label="bind_response_parent")
                     return h_res
 
-        _traced_handler._tp_traced = True
-        orig_action_handler = attempt(getattr, instance, handler_method, default=None, _label="orig_action_handler")
-        orig_method_handler = (
-            attempt(getattr, instance, method, default=None, _label="orig_method_handler")
-            if method != handler_method
-            else None
-        )
+            _traced_handler._tp_traced = True
+            orig_action_handler = attempt(getattr, instance, handler_method, default=None, _label="orig_action_handler")
+            orig_method_handler = (
+                attempt(getattr, instance, method, default=None, _label="orig_method_handler")
+                if method != handler_method
+                else None
+            )
 
-        attempt(setattr, instance, handler_method, _traced_handler, _label="bind_handler")
-        if orig_method_handler is not None:
-            attempt(setattr, instance, method, _traced_handler, _label="bind_method")
-        try:
-            res = wrapped(*args, **kwargs)
-            attempt(_bind_response_parent, res, _label="bind_response_parent")
-            return res
-        finally:
-            if orig_action_handler is not None:
-                attempt(setattr, instance, handler_method, orig_action_handler, _label="restore_handler")
+            attempt(setattr, instance, handler_method, _traced_handler, _label="bind_handler")
             if orig_method_handler is not None:
-                attempt(setattr, instance, method, orig_method_handler, _label="restore_method")
+                attempt(setattr, instance, method, _traced_handler, _label="bind_method")
+            try:
+                res = wrapped(*args, **kwargs)
+                attempt(_bind_response_parent, res, _label="bind_response_parent")
+                return res
+            finally:
+                if orig_action_handler is not None:
+                    attempt(setattr, instance, handler_method, orig_action_handler, _label="restore_handler")
+                if orig_method_handler is not None:
+                    attempt(setattr, instance, method, orig_method_handler, _label="restore_method")
+    finally:
+        _in_view_dispatch.reset(token)

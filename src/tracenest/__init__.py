@@ -37,6 +37,7 @@ _INITIALIZED = False
 _INIT_LOCK = threading.Lock()
 _ACTIVE_PROVIDER: Optional[TracerProvider] = None
 _ACTIVE_CONFIG: Optional[SDKConfig] = None
+_ATEXIT_REGISTERED = False
 
 
 def init(
@@ -105,7 +106,6 @@ def init(
         _ACTIVE_CONFIG = config
 
         if config.debug:
-            logging.basicConfig(level=logging.DEBUG)
             logger.setLevel(logging.DEBUG)
 
         # Build Resource attributes
@@ -212,13 +212,19 @@ def init(
             except Exception as exc:
                 logger.debug("Failed to auto-apply integrations during init: %s", exc)
 
-        # Register shutdown on process exit
-        def _shutdown():
-            try:
-                provider.shutdown()
-            except Exception:
-                pass
-        atexit.register(_shutdown)
+        # Register shutdown on process exit exactly once
+        global _ATEXIT_REGISTERED
+        if not _ATEXIT_REGISTERED:
+            def _shutdown():
+                global _ACTIVE_PROVIDER
+                try:
+                    if _ACTIVE_PROVIDER is not None:
+                        _ACTIVE_PROVIDER.shutdown()
+                except Exception:
+                    pass
+
+            atexit.register(_shutdown)
+            _ATEXIT_REGISTERED = True
 
         logger.info(
             "TraceNest initialized successfully (service=%s, env=%s, endpoint=%s)",
@@ -260,10 +266,14 @@ def _reset_for_testing() -> None:
             get_integration_manager().uninstrument_all()
         except Exception:
             pass
-        # Reset OpenTelemetry global state
-        trace._TRACER_PROVIDER = None  # type: ignore
+        # Reset OpenTelemetry global state safely for testing
+        if hasattr(trace, "_TRACER_PROVIDER"):
+            trace._TRACER_PROVIDER = None  # type: ignore
         if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE"):
-            trace._TRACER_PROVIDER_SET_ONCE._done = False  # type: ignore
+            try:
+                trace._TRACER_PROVIDER_SET_ONCE._done = False  # type: ignore
+            except Exception:
+                pass
 
 
 __all__ = [

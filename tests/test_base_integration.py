@@ -146,3 +146,19 @@ def test_traced_span_body_exception_propagates_once(monkeypatch):
             raise RuntimeError("app bug")
 
     assert calls == [1]
+
+
+def test_alias_opt_out_disables_canonical_integration():
+    """Verify that opting out via an alias (e.g. psycopg2=False) disables the canonical integration."""
+    from tracenest.integrations.manager import IntegrationManager
+
+    mgr = IntegrationManager()
+
+    # Pass psycopg2=False as kwarg override
+    instrumented = mgr.apply_integrations(psycopg2=False)
+    assert "postgres" not in instrumented
+    assert "psycopg2" not in instrumented
+    assert "postgresql" not in instrumented
+
+    mgr.uninstrument_all()
+

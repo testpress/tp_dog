@@ -5,12 +5,42 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 
+import math
+
+_TRUE_VALUES = {"1", "true", "yes", "on", "t", "y"}
+_FALSE_VALUES = {"0", "false", "no", "off", "f", "n"}
+
+
 def _str_to_bool(val: Any, default: bool = False) -> bool:
     if val is None:
         return default
     if isinstance(val, bool):
         return val
-    return str(val).strip().lower() in ("1", "true", "yes", "on")
+    s = str(val).strip().lower()
+    if not s:
+        return default
+    if s in _TRUE_VALUES:
+        return True
+    if s in _FALSE_VALUES:
+        return False
+    raise ValueError(
+        f"TraceNest: cannot parse {val!r} as boolean; "
+        f"accepted values: {sorted(_TRUE_VALUES | _FALSE_VALUES)}"
+    )
+
+
+def _parse_rate(val: Any, field_name: str = "sample_rate") -> float:
+    if val is None:
+        return 1.0
+    try:
+        r = float(val)
+    except (TypeError, ValueError):
+        raise ValueError(f"TraceNest: {field_name}={val!r} is not a valid number")
+    if math.isnan(r) or math.isinf(r):
+        raise ValueError(f"TraceNest: {field_name}={val!r} must be finite")
+    if not (0.0 <= r <= 1.0):
+        raise ValueError(f"TraceNest: {field_name}={val!r} is outside valid range [0.0, 1.0]")
+    return r
 
 
 def _detect_django_project_name() -> Optional[str]:
@@ -76,6 +106,7 @@ class SDKConfig:
     integrations: Dict[str, bool] = field(default_factory=dict)
     trace_nested_templates: bool = True
     template_enabled: bool = True
+    cache_enabled: bool = True
     template_exclude: List[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE_PATTERNS))
     db_two_tier_spans: bool = False
     tags: Dict[str, Any] = field(default_factory=dict)
@@ -83,6 +114,8 @@ class SDKConfig:
     ignore_endpoints: List[str] = field(default_factory=list)
     endpoint_sample_rules: Dict[str, float] = field(default_factory=dict)
     sample_errors: bool = True  # Retained for config parity; error retention is enforced via collector tail-sampling
+    trusted_proxies: List[str] = field(default_factory=list)
+    db_role_map: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_env_and_kwargs(
@@ -116,7 +149,6 @@ class SDKConfig:
             or os.getenv("TRACENEST_SERVICE_NAME")
             or os.getenv("OTEL_SERVICE_NAME")
             or os.getenv("OTEL_PROJECT_NAME")
-            or os.getenv("TP_OBS_PROJECT_NAME")
             or _detect_django_project_name()
             or "unknown-project"
         )
@@ -157,7 +189,6 @@ class SDKConfig:
             endpoint
             or os.getenv("TRACENEST_ENDPOINT")
             or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-            or os.getenv("TP_OBS_ENDPOINT")
             or "http://localhost:4318"
         )
 
@@ -176,28 +207,14 @@ class SDKConfig:
             merged_headers.update(headers)
 
         # 5. Sample rate
-        if sample_rate is not None:
-            resolved_sample_rate = float(sample_rate)
-        elif "TRACENEST_SAMPLE_RATE" in os.environ:
-            try:
-                resolved_sample_rate = float(os.environ["TRACENEST_SAMPLE_RATE"])
-            except ValueError:
-                resolved_sample_rate = 1.0
-        elif "OTEL_TRACES_SAMPLER_ARG" in os.environ:
-            try:
-                resolved_sample_rate = float(os.environ["OTEL_TRACES_SAMPLER_ARG"])
-            except ValueError:
-                resolved_sample_rate = 1.0
-        elif "SAMPLE_RATE" in os.environ:
-            try:
-                resolved_sample_rate = float(os.environ["SAMPLE_RATE"])
-            except ValueError:
-                resolved_sample_rate = 1.0
-        else:
-            resolved_sample_rate = cls.__dataclass_fields__["sample_rate"].default
-
-        # Clamp sample rate between 0.0 and 1.0
-        resolved_sample_rate = max(0.0, min(1.0, resolved_sample_rate))
+        raw_rate = (
+            sample_rate
+            if sample_rate is not None
+            else os.getenv("TRACENEST_SAMPLE_RATE")
+            or os.getenv("OTEL_TRACES_SAMPLER_ARG")
+            or os.getenv("SAMPLE_RATE")
+        )
+        resolved_sample_rate = _parse_rate(raw_rate, field_name="sample_rate") if raw_rate is not None else 1.0
 
         # 6. Disabled
         if disabled is not None:
@@ -205,8 +222,7 @@ class SDKConfig:
         else:
             resolved_disabled = _str_to_bool(
                 os.getenv("TRACENEST_DISABLED")
-                or os.getenv("OTEL_SDK_DISABLED")
-                or os.getenv("TP_OBS_DISABLED"),
+                or os.getenv("OTEL_SDK_DISABLED"),
                 default=False,
             )
 
@@ -216,7 +232,6 @@ class SDKConfig:
         else:
             resolved_debug = _str_to_bool(
                 os.getenv("TRACENEST_DEBUG")
-                or os.getenv("TP_OBS_DEBUG")
                 or os.getenv("OTEL_LOG_LEVEL") == "debug",
                 default=False,
             )
@@ -231,7 +246,6 @@ class SDKConfig:
         else:
             resolved_trace_nested = _str_to_bool(
                 os.getenv("TRACENEST_DJANGO_TRACE_NESTED_TEMPLATES")
-                or os.getenv("TP_OBS_DJANGO_TRACE_NESTED_TEMPLATES")
                 or os.getenv("OTEL_PYTHON_DJANGO_TRACE_NESTED_TEMPLATES"),
                 default=True,
             )
@@ -250,12 +264,16 @@ class SDKConfig:
                 resolved_template_exclude = [
                     p.strip() for p in os.environ["TRACENEST_TEMPLATE_EXCLUDE"].split(",") if p.strip()
                 ]
-            elif "TP_OBS_TEMPLATE_EXCLUDE" in os.environ:
-                resolved_template_exclude = [
-                    p.strip() for p in os.environ["TP_OBS_TEMPLATE_EXCLUDE"].split(",") if p.strip()
-                ]
             else:
                 resolved_template_exclude = default_exclude
+
+        # 10b. Cache instrumentation config
+        if "cache_enabled" in extra and extra["cache_enabled"] is not None:
+            resolved_cache_enabled = _str_to_bool(extra["cache_enabled"], default=True)
+        elif "TRACENEST_CACHE_ENABLED" in os.environ:
+            resolved_cache_enabled = _str_to_bool(os.environ["TRACENEST_CACHE_ENABLED"], default=True)
+        else:
+            resolved_cache_enabled = True
 
         # 11. 2-Tier Database Spans (Datadog Parity: connection alias -> driver db name)
         resolved_db_two_tier = _str_to_bool(
@@ -270,7 +288,7 @@ class SDKConfig:
             resolved_tags = dict(kwarg_tags)
         else:
             resolved_tags = {}
-            env_tags_str = os.getenv("TRACENEST_TAGS") or os.getenv("TP_OBS_TAGS") or os.getenv("OTEL_RESOURCE_ATTRIBUTES")
+            env_tags_str = os.getenv("TRACENEST_TAGS") or os.getenv("OTEL_RESOURCE_ATTRIBUTES")
             if env_tags_str:
                 for item in env_tags_str.split(","):
                     item = item.strip()
@@ -284,7 +302,9 @@ class SDKConfig:
             "template_enabled", "template_exclude", "db_two_tier_spans", "tags",
             "on_request_span", "ignore_endpoints", "IGNORE_ENDPOINTS",
             "endpoint_sample_rules", "endpoint_rules", "sample_rules", "ENDPOINT_SAMPLE_RULES",
-            "sample_errors", "service", "service_name", "cluster"
+            "sample_errors", "service", "service_name", "cluster",
+            "db_role_map", "DB_ROLE_MAP", "trusted_proxies", "TRUSTED_PROXIES",
+            "cache_enabled", "CACHE_ENABLED",
         }
         for k, v in extra.items():
             if k not in KNOWN_EXTRA_KEYS and not k.startswith("_"):
@@ -329,6 +349,30 @@ class SDKConfig:
         else:
             resolved_sample_errors = _str_to_bool(os.getenv("TRACENEST_SAMPLE_ERRORS", "true"), default=True)
 
+        kwarg_proxies = extra.get("trusted_proxies") or extra.get("TRUSTED_PROXIES")
+        if kwarg_proxies is not None:
+            if isinstance(kwarg_proxies, str):
+                resolved_trusted_proxies = [p.strip() for p in kwarg_proxies.split(",") if p.strip()]
+            else:
+                resolved_trusted_proxies = list(kwarg_proxies)
+        elif "TRACENEST_TRUSTED_PROXIES" in os.environ:
+            resolved_trusted_proxies = [p.strip() for p in os.environ["TRACENEST_TRUSTED_PROXIES"].split(",") if p.strip()]
+        else:
+            resolved_trusted_proxies = []
+
+        kwarg_db_role_map = extra.get("db_role_map") or extra.get("DB_ROLE_MAP")
+        if kwarg_db_role_map is not None:
+            resolved_db_role_map = dict(kwarg_db_role_map)
+        elif "TRACENEST_DB_ROLE_MAP" in os.environ:
+            resolved_db_role_map = {}
+            for item in os.environ["TRACENEST_DB_ROLE_MAP"].split(","):
+                item = item.strip()
+                if "=" in item:
+                    a, r = item.split("=", 1)
+                    resolved_db_role_map[a.strip()] = r.strip()
+        else:
+            resolved_db_role_map = {}
+
         return cls(
             project_name=resolved_project,
             cluster_name=resolved_cluster,
@@ -344,6 +388,7 @@ class SDKConfig:
             integrations=integs,
             trace_nested_templates=resolved_trace_nested,
             template_enabled=resolved_template_enabled,
+            cache_enabled=resolved_cache_enabled,
             template_exclude=resolved_template_exclude,
             db_two_tier_spans=resolved_db_two_tier,
             tags=resolved_tags,
@@ -351,4 +396,6 @@ class SDKConfig:
             ignore_endpoints=resolved_ignores,
             endpoint_sample_rules=resolved_rules,
             sample_errors=resolved_sample_errors,
+            trusted_proxies=resolved_trusted_proxies,
+            db_role_map=resolved_db_role_map,
         )

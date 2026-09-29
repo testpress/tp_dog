@@ -350,6 +350,41 @@ def test_safe_span_exporter_absorbs_network_exceptions():
     safe.shutdown()
 
 
+def test_safe_span_exporter_rate_limits_warnings(caplog):
+    """Verify SafeSpanExporter uses monotonic clock and rate-limits error warnings."""
+    import logging
+    from unittest.mock import patch
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+    from tracenest.exporter import SafeSpanExporter
+
+    class BrokenExporter(SpanExporter):
+        def export(self, spans):
+            raise ConnectionRefusedError("[Errno 61] Connection refused")
+
+    safe = SafeSpanExporter(BrokenExporter(), endpoint="http://localhost:4318/v1/traces")
+
+    with caplog.at_level(logging.WARNING, logger="tracenest.exporter"):
+        # Initial failure at t=100.0 (e.g. system uptime 100s)
+        with patch("time.monotonic", return_value=100.0):
+            res1 = safe.export([])
+            assert res1 == SpanExportResult.FAILURE
+        assert len(caplog.records) == 1
+        assert "Unable to export spans" in caplog.records[0].message
+
+        # Immediate second failure at t=105.0 within 300s window should be suppressed
+        with patch("time.monotonic", return_value=105.0):
+            res2 = safe.export([])
+            assert res2 == SpanExportResult.FAILURE
+        assert len(caplog.records) == 1
+
+        # Third failure at t=401.0 (> 300s elapsed) should log again
+        with patch("time.monotonic", return_value=401.0):
+            res3 = safe.export([])
+            assert res3 == SpanExportResult.FAILURE
+        assert len(caplog.records) == 2
+        assert "Failures: 3" in caplog.records[1].message
+
+
 def test_unreachable_collector_never_crashes_application():
     """Verify that tracing with an unreachable collector endpoint NEVER crashes or raises."""
     # Point to a dead/non-existent port on localhost
@@ -369,14 +404,6 @@ def test_unreachable_collector_never_crashes_application():
     # Shutdown must not raise
     provider.shutdown()
 
-
-def test_telemetry_request_failure_returns_safe_503():
-    """Verify _is_telemetry_request correctly identifies OTLP exporter endpoints."""
-    from tracenest.integrations.requests.client import _is_telemetry_request
-
-    assert _is_telemetry_request("http://localhost:4318/v1/traces", "localhost", 4318) is True
-    assert _is_telemetry_request("http://tp-otel-collector:4318/v1/traces", "tp-otel-collector", 4318) is True
-    assert _is_telemetry_request("https://api.github.com/users", "api.github.com", 443) is False
 
 
 
@@ -463,6 +490,39 @@ def test_sample_rate_ratio():
             pass
     finished = exporter.get_finished_spans()
     assert 20 <= len(finished) <= 80
+
+
+def test_str_to_bool_validation():
+    import pytest
+    from tracenest.config import _str_to_bool
+    assert _str_to_bool("true") is True
+    assert _str_to_bool("1") is True
+    assert _str_to_bool("false") is False
+    assert _str_to_bool("0") is False
+    assert _str_to_bool(None, default=True) is True
+
+    with pytest.raises(ValueError, match="cannot parse 'invalid_value' as boolean"):
+        _str_to_bool("invalid_value")
+
+
+def test_sample_rate_validation():
+    import pytest
+    from tracenest.config import SDKConfig
+
+    # Valid rates
+    cfg1 = SDKConfig.from_env_and_kwargs(sample_rate=0.5)
+    assert cfg1.sample_rate == 0.5
+    cfg2 = SDKConfig.from_env_and_kwargs(sample_rate="0.0")
+    assert cfg2.sample_rate == 0.0
+
+    # Invalid rates must raise ValueError
+    with pytest.raises(ValueError, match="outside valid range"):
+        SDKConfig.from_env_and_kwargs(sample_rate=1.5)
+    with pytest.raises(ValueError, match="outside valid range"):
+        SDKConfig.from_env_and_kwargs(sample_rate=-0.1)
+    with pytest.raises(ValueError, match="not a valid number"):
+        SDKConfig.from_env_and_kwargs(sample_rate="not_a_number")
+
 
 
 

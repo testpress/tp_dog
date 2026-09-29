@@ -689,4 +689,100 @@ def test_template_query_nesting_waterfall():
     assert db_span.context.trace_id == template_span.context.trace_id
 
 
+def test_concurrent_template_rendering_thread_safety():
+    """Verify that multiple concurrent threads rendering the same template instance all generate spans."""
+    import concurrent.futures
+    from django.template import Template, Context
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    tracenest.init(project_name="template-thread-safety-test", exporter=exporter, export_batch=False)
+
+    shared_template = Template("<div>Hello {{ name }}</div>")
+    shared_template.name = "shared/greeting.html"
+
+    num_threads = 8
+    def render_worker(i):
+        return shared_template.render(Context({"name": f"User_{i}"}))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        results = list(executor.map(render_worker, range(num_threads)))
+
+    assert len(results) == num_threads
+    for i, res in enumerate(results):
+        assert f"User_{i}" in res
+
+    spans = exporter.get_finished_spans()
+    template_spans = [s for s in spans if "shared/greeting.html" in s.name]
+    # Every thread must have successfully traced the template render without dropping spans
+    assert len(template_spans) == num_threads
+
+
+def test_traceparent_header_respects_sampling_decision():
+    """Verify that W3C traceparent header reflects the head-based sampling decision (01 vs 00)."""
+    from django.core.handlers.wsgi import WSGIHandler
+    from django.test import RequestFactory
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    factory = RequestFactory()
+
+    # 1. Sampled request (sample_rate=1.0) -> trace_flags should be 01
+    exporter1 = InMemorySpanExporter()
+    tracenest.init(project_name="sample-test-on", exporter=exporter1, sample_rate=1.0, export_batch=False)
+    handler = WSGIHandler()
+    handler.load_middleware()
+    req1 = factory.get("/test/sample/")
+    res1 = handler.get_response(req1)
+    assert res1.status_code == 200
+    assert "traceparent" in res1
+    flags1 = int(res1["traceparent"].split("-")[-1], 16)
+    assert flags1 & 1 == 1, f"Expected sampled flag bit 1 to be set, got {res1['traceparent']}"
+
+    tracenest._reset_for_testing()
+
+    # 2. Dropped request (sample_rate=0.0) -> trace_flags bit 0 should be 0 (unsampled)
+    exporter2 = InMemorySpanExporter()
+    tracenest.init(project_name="sample-test-off", exporter=exporter2, sample_rate=0.0, export_batch=False)
+    handler2 = WSGIHandler()
+    handler2.load_middleware()
+    req2 = factory.get("/test/sample/")
+    res2 = handler2.get_response(req2)
+    assert res2.status_code == 200
+    assert "traceparent" in res2
+    flags2 = int(res2["traceparent"].split("-")[-1], 16)
+    assert flags2 & 1 == 0, f"Expected unsampled flag bit 0 to be cleared, got {res2['traceparent']}"
+
+
+def test_drf_view_dispatch_reentrancy_single_span():
+    """Verify that nested dispatch calls (e.g. DRF APIView calling super().dispatch) emit only 1 dispatch span."""
+    from tracenest.integrations.django.view import traced_view_dispatch
+
+    exporter = InMemorySpanExporter()
+    tracenest.init(project_name="dispatch-reentrant-test", exporter=exporter, export_batch=False)
+
+    class ParentView(View):
+        def dispatch(self, request, *args, **kwargs):
+            return HttpResponse("parent done")
+
+    class ChildDRFView(ParentView):
+        def dispatch(self, request, *args, **kwargs):
+            # Calls ParentView.dispatch through traced_view_dispatch wrapper
+            wrapped_parent = lambda *a, **k: super(ChildDRFView, self).dispatch(*a, **k)
+            return traced_view_dispatch(wrapped_parent, self, (request,) + args, kwargs)
+
+    view_inst = ChildDRFView()
+    factory = RequestFactory()
+    req = factory.get("/test/drf/")
+
+    wrapped_child = lambda *a, **k: view_inst.dispatch(*a, **k)
+    response = traced_view_dispatch(wrapped_child, view_inst, (req,), {})
+    assert response.status_code == 200
+
+    spans = exporter.get_finished_spans()
+    dispatch_spans = [s for s in spans if "dispatch" in s.name]
+    assert len(dispatch_spans) == 1, f"Expected exactly 1 dispatch span, got {[s.name for s in dispatch_spans]}"
+
+
+
+
 

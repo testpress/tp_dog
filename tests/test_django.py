@@ -440,3 +440,65 @@ def test_sensitive_query_parameters_sanitized_in_django_request():
     assert "sig=REDACTED" in query
 
 
+def test_client_address_trusted_proxies():
+    """Verify X-Forwarded-For is only trusted when REMOTE_ADDR is in trusted_proxies, walking right-to-left."""
+    from tracenest.integrations.django.request import _resolve_client_address
+
+    class DummyReq:
+        def __init__(self, remote_addr, xff=None):
+            self.META = {"REMOTE_ADDR": remote_addr}
+            if xff:
+                self.META["HTTP_X_FORWARDED_FOR"] = xff
+
+    # 1. Untrusted proxy: client sent spoofed XFF, but REMOTE_ADDR is untrusted
+    req = DummyReq("198.51.100.1", xff="1.1.1.1, 2.2.2.2")
+    # With trusted_proxies empty, REMOTE_ADDR is used
+    assert _resolve_client_address(req, []) == "198.51.100.1"
+    # Even if 10.0.0.1 is trusted, remote is 198.51.100.1 -> still uses REMOTE_ADDR
+    assert _resolve_client_address(req, ["10.0.0.1"]) == "198.51.100.1"
+
+    # 2. Trusted proxy: remote_addr is in trusted_proxies -> walks right-to-left
+    # Hop chain: client (203.0.113.195), proxy1 (10.0.0.2), proxy2 (10.0.0.1)
+    req2 = DummyReq("10.0.0.1", xff="spoofed.ip, 203.0.113.195, 10.0.0.2")
+    trusted = ["10.0.0.1", "10.0.0.2"]
+    assert _resolve_client_address(req2, trusted) == "203.0.113.195"
+
+    # 3. Port stripping and IPv6 brackets
+    req3 = DummyReq("10.0.0.1", xff="[2001:db8::1]:8080, 10.0.0.2")
+    assert _resolve_client_address(req3, trusted) == "2001:db8::1"
+
+
+def test_unmatched_route_normalization():
+    """Verify unresolvable routes map http.route to __unmatched__ to prevent cardinality explosion."""
+    from tracenest.integrations.django.request import _normalize_route, _preresolve_route
+
+    # 1. Preresolve on non-existent path
+    assert _preresolve_route("/scanners/wp-login.php") == "__unmatched__"
+
+    # 2. Normalize route on request with no resolver_match
+    class NoMatchReq:
+        resolver_match = None
+
+    assert _normalize_route(NoMatchReq(), "/random/123") == "__unmatched__"
+
+    # 3. Full request through handler for a 404
+    exporter = InMemorySpanExporter()
+    tracenest.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+
+    from django.core.handlers.wsgi import WSGIHandler
+    handler = WSGIHandler()
+    handler.load_middleware()
+
+    factory = RequestFactory()
+    request = factory.get("/scanners/probe?id=999")
+    response = handler.get_response(request)
+    assert response.status_code == 404
+
+    spans = exporter.get_finished_spans()
+    req_span = next(s for s in spans if s.name == "django.request")
+    assert req_span.attributes["http.route"] == "__unmatched__"
+    assert req_span.attributes["url.path"] == "/scanners/probe"
+
+
+
+

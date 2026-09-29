@@ -14,7 +14,7 @@ logger = logging.getLogger("config.otel")
 
 def setup_telemetry():
     """Initialize TraceNest with auto-patching. Idempotent, fail-safe."""
-    if os.environ.get("TRACENEST_DISABLED", os.environ.get("TP_OBS_DISABLED", "")).lower() in ("1", "true", "yes"):
+    if os.environ.get("TRACENEST_DISABLED", "").lower() in ("1", "true", "yes"):
         logger.info("TraceNest disabled via TRACENEST_DISABLED")
         return False
     try:

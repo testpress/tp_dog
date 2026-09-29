@@ -9,13 +9,14 @@ _STRING_LITERAL_RE = re.compile(r"'(?:''|[^'])*'")
 # Match numeric literals not attached to word characters (e.g. '= 42', ', 123.45', 'IN (1, 2)')
 _NUMERIC_LITERAL_RE = re.compile(r"(?<=[^\w\$.])\b\d+(?:\.\d+)?\b")
 # Match an IN/NOT IN predicate whose value list is purely a comma-separated run of
-# placeholders, e.g. "IN (?, ?, ?)" or "IN(?)". The inner group is deliberately unable to
-# match a subquery ("IN (SELECT ...)") or a composite element ("IN ((?), (?))") because
-# those contain tokens other than "?" and ",". This keeps the arity of the list out of the
-# resulting label so one query shape yields one series, while leaving any list that is not
-# provably a flat placeholder list untouched.
-_IN_PLACEHOLDER_LIST_RE = re.compile(r"\b(IN)\s*\(\s*\?(?:\s*,\s*\?)*\s*\)", re.IGNORECASE)
+# placeholders, e.g. "IN (?, ?, ?)", "IN (%s, %s)", or "IN(?)".
+_IN_PLACEHOLDER_LIST_RE = re.compile(r"\b(IN|NOT\s+IN)\s*\(\s*(?:\?|%s|\$\d+)(?:\s*,\s*(?:\?|%s|\$\d+))*\s*\)", re.IGNORECASE)
+_BATCH_VALUES_RE = re.compile(r"\bVALUES\s*\([^)]+\)(?:\s*,\s*\([^)]+\))+", re.IGNORECASE)
+_SQL_COMMENTS_RE = re.compile(r"/\*.*?\*/|--[^\r\n]*")
+_DOLLAR_QUOTE_RE = re.compile(r"\$(\w*)\$.*?\$\1\$", re.DOTALL)
+_UNCLOSED_DOLLAR_QUOTE_RE = re.compile(r"\$[a-zA-Z_]\w*\$|\$\$")
 _MAX_STATEMENT_LENGTH = 4096
+_MAX_METRIC_STATEMENT_LENGTH = 256
 
 _SENSITIVE_QUERY_KEYS = {
     "token", "auth", "password", "pass", "secret", "key", "apikey", "api_key",
@@ -29,11 +30,14 @@ def sanitize_sql(sql: Optional[str], max_length: int = _MAX_STATEMENT_LENGTH) ->
     Sanitize SQL statements by replacing literal values with placeholders.
     
     Replaces:
+    - Postgres dollar-quoted strings: $$secret$$ or $tag$secret$tag$ -> ?
     - String literals: 'example' -> ?
     - Numeric literals: 42, 3.14 -> ?
     - Collapses placeholder list arity: 'IN (?, ?, ?)' -> 'IN (?)'
     - Normalizes multiple whitespace characters into a single space.
-    - Truncates excessively long queries.
+    - Pre-truncates to bound regex processing time on large queries.
+    - Truncates excessively long queries to max_length.
+    - Fail-closed: returns '<unparseable-sql>' on unparseable/unterminated constructs.
     """
     if not sql:
         return ""
@@ -41,22 +45,69 @@ def sanitize_sql(sql: Optional[str], max_length: int = _MAX_STATEMENT_LENGTH) ->
         try:
             sql = str(sql)
         except Exception:
-            return ""
+            return "<unparseable-sql>"
 
-    # Replace string literals first
-    sanitized = _STRING_LITERAL_RE.sub("?", sql)
-    # Replace numeric literals
-    sanitized = _NUMERIC_LITERAL_RE.sub("?", sanitized)
-    # Collapse the arity of placeholder-only IN lists. This runs after literal
-    # substitution so that a concrete list like "IN (1, 2, 3)" has already become
-    # "IN (?, ?, ?)" and is therefore eligible for collapsing.
-    sanitized = _IN_PLACEHOLDER_LIST_RE.sub(r"\1 (?)", sanitized)
-    # Normalize whitespace
-    normalized = _WHITESPACE_RE.sub(" ", sanitized).strip()
+    # Pre-truncate to bound regex execution time (O(max_length))
+    pre_truncated = sql[: max_length * 4]
 
-    if len(normalized) > max_length:
-        return normalized[:max_length] + " ... [truncated]"
-    return normalized
+    try:
+        # 1. Replace dollar-quoted strings first
+        sanitized = _DOLLAR_QUOTE_RE.sub("?", pre_truncated)
+        # Check for unclosed dollar quote tags
+        if _UNCLOSED_DOLLAR_QUOTE_RE.search(sanitized):
+            return "<unparseable-sql>"
+
+        # 2. Replace string literals
+        sanitized = _STRING_LITERAL_RE.sub("?", sanitized)
+
+        # 3. Replace numeric literals
+        sanitized = _NUMERIC_LITERAL_RE.sub("?", sanitized)
+
+        # 4. Collapse arity of placeholder-only IN lists
+        sanitized = _IN_PLACEHOLDER_LIST_RE.sub(r"\1 (?)", sanitized)
+
+        # 5. Normalize whitespace
+        normalized = _WHITESPACE_RE.sub(" ", sanitized).strip()
+
+        if len(normalized) > max_length:
+            return normalized[:max_length] + " ... [truncated]"
+        return normalized
+    except Exception:
+        return "<unparseable-sql>"
+
+
+def normalize_sql_for_metric(sql: Optional[str], max_length: int = _MAX_METRIC_STATEMENT_LENGTH) -> str:
+    """
+    Produce a canonical, bounded query fingerprint for metric labels (Prometheus spanmetrics).
+
+    Guarantees:
+    - Replaces dynamic IN (?, ?, ...) / IN (%s, %s) arity with IN (?)
+    - Collapses multi-row batch inserts VALUES (...), (...) into VALUES (...)
+    - Strips inline SQL comments
+    - Collapses whitespace
+    - Hard bounds string length to max_length (default 256) to cap Prometheus label memory
+    """
+    if not sql:
+        return ""
+    sanitized = sanitize_sql(sql, max_length=max_length * 2)
+    if sanitized == "<unparseable-sql>":
+        return sanitized
+
+    try:
+        # Strip comments
+        cleaned = _SQL_COMMENTS_RE.sub("", sanitized)
+        # Collapse batch insert VALUES (...), (...)
+        cleaned = _BATCH_VALUES_RE.sub("VALUES (...)", cleaned)
+        # Collapse IN placeholder lists
+        cleaned = _IN_PLACEHOLDER_LIST_RE.sub(r"\1 (?)", cleaned)
+        # Normalize whitespace
+        normalized = _WHITESPACE_RE.sub(" ", cleaned).strip()
+
+        if len(normalized) > max_length:
+            return normalized[: max_length - 3] + "..."
+        return normalized
+    except Exception:
+        return "<unparseable-sql>"
 
 
 def sanitize_query_string(query: Optional[str]) -> str:
@@ -113,4 +164,9 @@ def sanitize_url(url: Optional[str], strip_query: bool = False) -> str:
         ))
         return cleaned
     except Exception:
-        return str(url)
+        # Never return raw URL on parse error to avoid leaking query tokens or credentials
+        try:
+            clean = str(url).split("?", 1)[0].split("#", 1)[0]
+            return clean if clean else "<unparseable-url>"
+        except Exception:
+            return "<unparseable-url>"

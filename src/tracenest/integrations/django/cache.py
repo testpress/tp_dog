@@ -26,8 +26,30 @@ def set_config(config: Optional[SDKConfig]) -> None:
 
 
 def _get_config() -> Optional[SDKConfig]:
-    """Return the config received through the integration seam, or global fallback."""
-    return _config if _config is not None else tracenest.get_config()
+    """Return the config received through the integration seam, or active config."""
+    if _config is not None:
+        return _config
+    return getattr(tracenest, "_ACTIVE_CONFIG", None)
+
+
+_REDIS_BACKEND_CLASSES = {
+    "django_redis.cache.RedisCache",
+    "django.core.cache.backends.redis.RedisCache",
+}
+
+
+def _is_redis_backend(instance: Any) -> bool:
+    if instance is None:
+        return False
+    cls = getattr(instance, "__class__", type(instance))
+    for c in getattr(cls, "__mro__", (cls,)):
+        full_name = f"{getattr(c, '__module__', '')}.{getattr(c, '__name__', '')}"
+        if full_name in _REDIS_BACKEND_CLASSES:
+            return True
+        mod = getattr(c, "__module__", "")
+        if mod == "django_redis.cache" or mod == "django.core.cache.backends.redis":
+            return True
+    return False
 
 
 def make_traced_cache_op(op_name: str):
@@ -35,17 +57,16 @@ def make_traced_cache_op(op_name: str):
         # Pre-application telemetry must never prevent the cache operation from
         # running; every step below degrades independently.
         cfg = attempt(_get_config, default=None, _label="cache_config")
-        if cfg and not getattr(cfg, "cache_enabled", True):
+        if cfg and not cfg.cache_enabled:
             return wrapped(*args, **kwargs)
 
         # Avoid nested duplicate spans if both RedisCache and DefaultClient are wrapped
         if _in_cache_span.get():
             return wrapped(*args, **kwargs)
 
-        backend_mod = attempt(getattr, instance.__class__, "__module__", default="", _label="cache_backend_mod")
         backend_cls = attempt(getattr, instance.__class__, "__name__", default="cache", _label="cache_backend_cls")
 
-        if "django_redis" in backend_mod or "redis" in backend_mod.lower():
+        if _is_redis_backend(instance):
             span_name = f"🔴 django_redis.cache.{op_name}"
         else:
             span_name = f"🔴 django.cache.{op_name}"

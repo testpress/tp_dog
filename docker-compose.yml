@@ -243,7 +243,7 @@ services:
       - ./docker/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
       - "4317:4317" # OTLP gRPC receiver
-      - "4318:4318" # OTLP HTTP receiver (used by tp_obs_v3 SDK)
+      - "4318:4318" # OTLP HTTP receiver (used by tracenest SDK)
       - "8888:8888" # Internal Collector metrics endpoint (heap, queues, rss)
       - "8889:8889" # Prometheus metrics exporter
     depends_on:

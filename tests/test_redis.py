@@ -66,6 +66,28 @@ def test_django_redis_cache_tracing(memory_exporter):
     assert span.attributes["django.cache.hit"] is True
 
 
+def test_non_redis_cache_not_misclassified(memory_exporter):
+    """Verify that a non-Redis backend with 'redis' in module name (e.g. myapp.redis_helpers) is not misclassified."""
+    from tracenest.integrations.django.cache import make_traced_cache_op
+
+    class HelperCache:
+        __module__ = "myapp.redis_helpers"
+
+        def get(self, key):
+            return "ok"
+
+    cache = HelperCache()
+    traced_get = make_traced_cache_op("get")
+    result = traced_get(lambda k: cache.get(k), cache, ("test_key",), {})
+    assert result == "ok"
+
+    spans = memory_exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "🔴 django.cache.get"
+    assert spans[0].attributes["django.cache.backend"] == "HelperCache"
+
+
+
 def test_redis_integration_apply_patch_and_uninstrument(monkeypatch):
     """Verify RedisIntegration instruments and uninstruments cleanly."""
     import sys

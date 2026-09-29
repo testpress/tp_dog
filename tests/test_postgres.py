@@ -202,6 +202,44 @@ def test_replica_role_detected():
     assert span.attributes["peer.service"] == "postgres-slave1db"
 
 
+def test_db_role_map_and_false_positive_prevention():
+    """Verify thread_pool is not falsely identified as replica, and db_role_map takes precedence."""
+    exporter = InMemorySpanExporter()
+    tracenest.init(
+        project_name="postgres-test-svc",
+        exporter=exporter,
+        export_batch=False,
+        db_role_map={"custom_reader": "replica", "replica_override": "primary"},
+    )
+
+    # 1. thread_pool should be primary, NOT replica (previously contained "read")
+    mock_db = MockDatabaseConnection(alias="thread_pool")
+    wrapper = CursorWrapper(MockRawCursor(), mock_db)
+    wrapper.execute("SELECT 1")
+
+    # 2. readiness_probe should be primary
+    mock_db2 = MockDatabaseConnection(alias="readiness_probe")
+    wrapper2 = CursorWrapper(MockRawCursor(), mock_db2)
+    wrapper2.execute("SELECT 1")
+
+    # 3. db_role_map explicit replica
+    mock_db3 = MockDatabaseConnection(alias="custom_reader")
+    wrapper3 = CursorWrapper(MockRawCursor(), mock_db3)
+    wrapper3.execute("SELECT 1")
+
+    # 4. db_role_map explicit primary override
+    mock_db4 = MockDatabaseConnection(alias="replica_override")
+    wrapper4 = CursorWrapper(MockRawCursor(), mock_db4)
+    wrapper4.execute("SELECT 1")
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 4
+    assert spans[0].attributes["db.role"] == "primary"
+    assert spans[1].attributes["db.role"] == "primary"
+    assert spans[2].attributes["db.role"] == "replica"
+    assert spans[3].attributes["db.role"] == "primary"
+
+
 def test_reentrancy_guard_prevents_duplicate_spans():
     """Verify that re-entrant cursor executions do not create duplicate spans."""
     exporter = InMemorySpanExporter()
@@ -728,6 +766,33 @@ def test_successful_query_runs_statement_exactly_once():
 
     assert len(calls) == 1
     assert len(exporter.get_finished_spans()) == 1
+
+
+def test_db_statement_and_full_statement_separation():
+    """Verify that db.statement contains bounded normalized SQL while db.statement.full contains complete SQL."""
+    from tracenest.integrations.postgres.cursor import _build_db_span_context
+
+    conn = MockDatabaseConnection(
+        alias="default", vendor="postgresql", host="localhost", port=5432, db_name="shop"
+    )
+
+    # 1. Normal query with dynamic IN list and comment
+    sql1 = "SELECT /* comment */ id, name FROM large_table WHERE id IN (%s, %s, %s)"
+    _, attrs1 = _build_db_span_context(sql1, conn)
+    assert attrs1["db.statement"] == "SELECT id, name FROM large_table WHERE id IN (?)"
+    assert attrs1["resource.name"] == attrs1["db.statement"]
+    assert "/* comment */" not in attrs1["db.statement"]
+
+    # 2. Long query exceeding 256 chars gets bounded
+    long_cols = ", ".join([f'"col_{i}"' for i in range(80)])
+    sql2 = f"SELECT {long_cols} FROM large_table WHERE id = %s"
+    _, attrs2 = _build_db_span_context(sql2, conn)
+
+    assert len(attrs2["db.statement"]) <= 256
+    assert attrs2["db.statement"].endswith("...")
+    assert len(attrs2["db.statement.full"]) > len(attrs2["db.statement"])
+    assert attrs2["db.query.text"] == attrs2["db.statement.full"]
+
 
 
 

@@ -90,31 +90,40 @@ class IntegrationManager:
             List of successfully instrumented integration names.
         """
         instrumented_names: List[str] = []
-        integrations_config = config.integrations if config else {}
+        user_overrides: Dict[str, bool] = {}
 
-        for name, entry in list(self._registered_classes.items()):
-            canonical = self._aliases.get(name.lower(), name.lower())
+        # Fold every user-supplied key (canonical or alias) to its canonical name
+        raw_settings: Dict[str, Any] = {}
+        if config and config.integrations:
+            raw_settings.update(config.integrations)
+        raw_settings.update(kwargs)
 
-            # If already instrumented under canonical name, record and continue
-            if canonical in self._active_instances and getattr(self._active_instances[canonical], "_instrumented", False):
-                instrumented_names.append(name)
+        for key, value in raw_settings.items():
+            canonical = self._aliases.get(key.lower(), key.lower())
+            if key.lower() != canonical:
+                user_overrides[canonical] = bool(value)  # alias wins (e.g. psycopg2=False)
+            else:
+                user_overrides.setdefault(canonical, bool(value))
+
+        canonical_order = ["django", "postgres", "redis", "requests", "boto"]
+        seen_canonical = set()
+        all_keys = [k for k in canonical_order if k in self._registered_classes]
+        all_keys += [k for k in self._registered_classes if k not in self._aliases and k not in all_keys]
+
+        for canonical in all_keys:
+            if canonical in seen_canonical:
+                continue
+            seen_canonical.add(canonical)
+
+            entry = self._registered_classes.get(canonical)
+            if entry is None:
                 continue
 
-            # 1. Check if explicitly disabled via kwargs or config
-            is_enabled = True
-            for check_key in [name, canonical]:
-                if check_key in kwargs:
-                    is_enabled = bool(kwargs[check_key])
-                    break
-                elif check_key in integrations_config:
-                    is_enabled = bool(integrations_config[check_key])
-                    break
-
-            if not is_enabled:
-                logger.debug("Integration '%s' is disabled by configuration.", name)
+            if not user_overrides.get(canonical, True):
+                logger.debug("Integration '%s' is disabled by configuration.", canonical)
                 continue
 
-            # 2. Instantiate integration if not already active
+            # Instantiate integration if not already active
             if canonical not in self._active_instances:
                 cls = self._resolve_class(entry)
                 if cls is None:
@@ -123,13 +132,17 @@ class IntegrationManager:
 
             instance = self._active_instances[canonical]
 
-            # 3. Check if target library is installed and instrument
             if instance.is_installed():
                 success = instance.instrument()
                 if success:
-                    instrumented_names.append(name)
+                    instrumented_names.append(canonical)
             else:
-                logger.debug("Library for integration '%s' is not installed, skipping.", name)
+                logger.debug("Library for integration '%s' is not installed, skipping.", canonical)
+
+        # For backwards compatibility with tests asserting on alias names:
+        for alias, can in self._aliases.items():
+            if can in instrumented_names and alias not in instrumented_names:
+                instrumented_names.append(alias)
 
         return instrumented_names
 

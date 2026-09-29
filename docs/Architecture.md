@@ -99,7 +99,7 @@ Tempo is a high-volume, cost-effective distributed tracing backend.
 - **Storage Strategy**:
   - Writes active blocks to `/var/tempo/wal` (Write-Ahead Log) and `/var/tempo/traces`.
   - Rolls blocks every 5 minutes (`max_block_duration: 5m`).
-  - Automatically compacts and retains traces for 24 hours (`block_retention: 24h`).
+  - Automatically compacts and retains traces for 14 days (`block_retention: 336h`).
 - **Querying**:
   - Exposes an HTTP query API on port `3200`.
   - Supports **TraceQL** search (e.g. `{ span.http.route = "/api/orders/" && duration > 500ms }`).

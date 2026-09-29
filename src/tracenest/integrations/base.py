@@ -111,6 +111,8 @@ class BaseIntegration(abc.ABC):
                     setattr(target_obj, attr_name, current.__wrapped__)
                 elif original is not None:
                     setattr(target_obj, attr_name, original)
+                elif hasattr(target_obj, attr_name):
+                    delattr(target_obj, attr_name)
             except Exception as exc:
                 logger.debug(
                     "Error unwrapping %s on %s in %s integration: %s",

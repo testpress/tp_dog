@@ -9,7 +9,7 @@ from opentelemetry.context import attach, detach, set_value, get_value
 
 from tracenest.config import SDKConfig
 from tracenest.safety import UNTRACED, attempt, safe_set_attribute
-from tracenest.sanitize import sanitize_sql
+from tracenest.sanitize import normalize_sql_for_metric, sanitize_sql
 from tracenest.tracing import reentrant_guard, traced_span
 import tracenest
 
@@ -26,8 +26,10 @@ def set_config(config: Optional[SDKConfig]) -> None:
 
 
 def _get_config() -> Optional[SDKConfig]:
-    """Return the config received through the integration seam, or global fallback."""
-    return _config if _config is not None else tracenest.get_config()
+    """Return the config received through the integration seam, or active config."""
+    if _config is not None:
+        return _config
+    return getattr(tracenest, "_ACTIVE_CONFIG", None)
 
 
 _KNOWN_SQL_OPS = (
@@ -111,8 +113,14 @@ def _extract_django_db_meta(instance_or_conn: Any) -> Tuple[str, str, str, str, 
             except (ValueError, TypeError):
                 db_port = 5432
 
-    alias_str = str(db_alias).lower()
-    if "slave" in alias_str or "replica" in alias_str or "read" in alias_str:
+    cfg = _get_config()
+    db_role_map = cfg.db_role_map if cfg else {}
+    alias_str = str(db_alias)
+    if alias_str in db_role_map:
+        db_role = db_role_map[alias_str]
+    elif alias_str.lower() in db_role_map:
+        db_role = db_role_map[alias_str.lower()]
+    elif re.search(r"(?:^|[_\-\b])(replica|slave|readonly|read)(?:$|[_\-\b0-9]|db\b)", alias_str, re.IGNORECASE):
         db_role = "replica"
     else:
         db_role = "primary"
@@ -150,6 +158,7 @@ def _build_db_span_context(
 ) -> Tuple[str, Dict[str, Any]]:
     """Construct span name and attributes for a database query."""
     sanitized_sql = sanitize_sql(sql)
+    metric_sql = normalize_sql_for_metric(sanitized_sql)
     op = extract_operation(sanitized_sql)
     db_alias, db_vendor, db_name, db_host, db_port, db_user, db_role, peer_service = _extract_django_db_meta(instance_or_conn)
     summary = extract_query_summary(sanitized_sql)
@@ -167,13 +176,14 @@ def _build_db_span_context(
         "net.peer.port": db_port,
         "server.address": str(db_host),
         "server.port": db_port,
-        "db.statement": sanitized_sql,
+        "db.statement": metric_sql,
+        "db.statement.full": sanitized_sql,
         "db.query.text": sanitized_sql,
         "db.query.summary": summary,
         "db.operation": op,
         "db.operation.name": op,
         "db.role": db_role,
-        "resource.name": sanitized_sql,
+        "resource.name": metric_sql,
     }
     if is_pgbouncer:
         span_attrs["db.connection.pool"] = "pgbouncer"
@@ -181,7 +191,7 @@ def _build_db_span_context(
         span_attrs["db.user"] = str(db_user)
 
     db_icon = "🔵" if is_pgbouncer else "🐘"
-    span_name = f"{db_icon} {sanitized_sql}" if sanitized_sql else f"{db_icon} postgres.query"
+    span_name = f"{db_icon} {metric_sql}" if metric_sql else f"{db_icon} postgres.query"
 
     return span_name, span_attrs
 

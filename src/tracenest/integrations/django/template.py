@@ -1,7 +1,7 @@
 """Template span — wraps django.template.base.Template.render and TemplateResponse.render."""
 import fnmatch
 from contextvars import ContextVar
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, FrozenSet, List, Optional, Tuple
 
 from opentelemetry.trace import SpanKind, set_span_in_context
 
@@ -11,6 +11,9 @@ from tracenest.tracing import traced_span
 import tracenest
 
 _in_template_span: ContextVar[bool] = ContextVar("in_template_span", default=False)
+_active_rendering_templates: ContextVar[FrozenSet[int]] = ContextVar(
+    "active_rendering_templates", default=frozenset()
+)
 
 _config: Optional[SDKConfig] = None
 
@@ -22,8 +25,10 @@ def set_config(config: Optional[SDKConfig]) -> None:
 
 
 def _get_config() -> Optional[SDKConfig]:
-    """Return the config received through the integration seam, or global fallback."""
-    return _config if _config is not None else tracenest.get_config()
+    """Return the config received through the integration seam, or active config."""
+    if _config is not None:
+        return _config
+    return getattr(tracenest, "_ACTIVE_CONFIG", None)
 
 
 def _is_excluded(template_name: str, patterns: Optional[List[str]]) -> bool:
@@ -81,23 +86,24 @@ def traced_template_render(wrapped: Callable, instance: Any, args: Any, kwargs: 
     if plan is UNTRACED or plan is None:
         return wrapped(*args, **kwargs)
 
-    span_name, span_attrs, token, inner_tmpl = plan
+    span_name, span_attrs, new_active = plan
 
+    token_active = _active_rendering_templates.set(new_active)
+    token_span = _in_template_span.set(True)
+    tokens = (token_active, token_span)
     try:
         with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django"):
             return wrapped(*args, **kwargs)
     finally:
-        attempt(_clear_template_render_flag, instance, inner_tmpl, _label="clear_render_flag")
-        attempt(_in_template_span.reset, token, _label="reset_template_span")
+        attempt(_clear_template_tokens, tokens, _label="clear_render_tokens")
 
 
 def _plan_template_render(instance: Any):
     """Build the pre-application telemetry plan for a template render.
 
     Returns ``None`` when the template should be rendered untraced, otherwise
-    ``(span_name, span_attrs, context_token, inner_template)``. Raises on
-    genuine telemetry faults; :func:`traced_template_render` converts those
-    into an untraced render.
+    ``(span_name, span_attrs, new_active)``. Raises on genuine telemetry faults;
+    :func:`traced_template_render` converts those into an untraced render.
     """
     template_str = _extract_template_name(instance)
     if not template_str:
@@ -120,7 +126,12 @@ def _plan_template_render(instance: Any):
         if not trace_nested:
             return None
 
-    if getattr(instance, "_tp_rendering", False):
+    active = _active_rendering_templates.get()
+    inst_id = id(instance)
+    inner_tmpl = getattr(instance, "template", None)
+    inner_id = id(inner_tmpl) if (inner_tmpl is not None and inner_tmpl is not instance) else None
+
+    if inst_id in active or (inner_id is not None and inner_id in active):
         return None
 
     engine = getattr(instance, "engine", None)
@@ -135,19 +146,25 @@ def _plan_template_render(instance: Any):
     if cfg and cfg.tags:
         span_attrs.update(cfg.tags)
 
-    token = _in_template_span.set(True)
-    instance._tp_rendering = True
-    inner_tmpl = getattr(instance, "template", None)
-    if inner_tmpl is not None and inner_tmpl is not instance:
-        inner_tmpl._tp_rendering = True
-    return span_name, span_attrs, token, inner_tmpl
+    new_active = active | {inst_id}
+    if inner_id is not None:
+        new_active = new_active | {inner_id}
+    return span_name, span_attrs, new_active
 
 
-def _clear_template_render_flag(instance: Any, inner_tmpl: Any) -> None:
-    """Undo the re-entrancy flags. Never allowed to mask the render result."""
-    instance._tp_rendering = False
-    if inner_tmpl is not None and inner_tmpl is not instance:
-        inner_tmpl._tp_rendering = False
+def _clear_template_tokens(tokens: Any) -> None:
+    """Reset template rendering context variables safely."""
+    if not tokens or not isinstance(tokens, tuple) or len(tokens) != 2:
+        return
+    token_active, token_span = tokens
+    try:
+        _active_rendering_templates.reset(token_active)
+    except Exception:
+        pass
+    try:
+        _in_template_span.reset(token_span)
+    except Exception:
+        pass
 
 
 def _extract_response_template_name(instance: Any) -> str:

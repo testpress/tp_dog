@@ -57,7 +57,7 @@ The TraceNest dashboard suite is organized hierarchically from high-level operat
 ---
 
 ### 2. Service Catalog & Global Health
-* **UID**: `tracenest-service-catalog`
+* **UID**: `tracenest-project-catalog`
 * **Purpose**: Single-pane-of-glass overview across all microservices and background workers.
 * **Key Panels**:
   * **Global Service Grid**: High-level health cards displaying RPS, Error Rate %, and P95 latency per service.
@@ -81,7 +81,7 @@ The TraceNest dashboard suite is organized hierarchically from high-level operat
 ---
 
 ### 4. Django Endpoint Details
-* **UID**: `tracenest-django-endpoint-details`
+* **UID**: `tracenest-django-endpoint`
 * **Purpose**: Deep-dive into a single endpoint route.
 * **Key Panels**:
   * **Endpoint RED Metrics**: Route-specific RPS, error rate, and duration percentiles.
@@ -106,7 +106,7 @@ The TraceNest dashboard suite is organized hierarchically from high-level operat
 ---
 
 ### 6. PostgreSQL Query Details
-* **UID**: `tracenest-postgres-query-details`
+* **UID**: `tracenest-postgres-query`
 * **Purpose**: Deep performance analysis of a specific SQL query pattern.
 * **Key Panels**:
   * **Sanitized Query Pattern**: Full normalized query text with literals parameterized (`WHERE id = %s`).
@@ -117,7 +117,7 @@ The TraceNest dashboard suite is organized hierarchically from high-level operat
 ---
 
 ### 7. Redis Overview & Command Details
-* **UIDs**: `tracenest-redis-overview`, `tracenest-redis-command-details`
+* **UIDs**: `tracenest-redis-overview`, `tracenest-redis-command`
 * **Purpose**: Cache performance, command timing, and pipeline diagnostics.
 * **Key Panels**:
   * **Commands per Second**: Command volume partitioned by command name (`GET`, `SET`, `HGETALL`, `INCR`).

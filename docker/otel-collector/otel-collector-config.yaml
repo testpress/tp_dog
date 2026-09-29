@@ -65,7 +65,7 @@ connectors:
       - name: server.port
       - name: error
       - name: span.type
-    dimensions_cache_size: 1000
+    dimensions_cache_size: 5000
 
 exporters:
   otlp/tempo:

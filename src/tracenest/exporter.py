@@ -23,7 +23,7 @@ class SafeSpanExporter(SpanExporter):
     def __init__(self, exporter: SpanExporter, endpoint: Optional[str] = None):
         self._exporter = exporter
         self._endpoint = endpoint or getattr(exporter, "_endpoint", "collector")
-        self._last_log_time = 0.0
+        self._last_log_time = -float("inf")
         self._error_count = 0
 
     def export(self, spans: Any) -> SpanExportResult:
@@ -35,7 +35,7 @@ class SafeSpanExporter(SpanExporter):
             return res
         except Exception as exc:
             self._error_count += 1
-            now = time.time()
+            now = time.monotonic()
             # Rate-limit warnings: log first failure, then at most once every 5 minutes
             if now - self._last_log_time > 300:
                 self._last_log_time = now

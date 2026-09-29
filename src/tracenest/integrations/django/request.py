@@ -28,8 +28,10 @@ def set_config(config: Optional[SDKConfig]) -> None:
 
 
 def _get_config() -> Optional[SDKConfig]:
-    """Return the config received through the integration seam, or global fallback."""
-    return _config if _config is not None else tracenest.get_config()
+    """Return the config received through the integration seam, or active config."""
+    if _config is not None:
+        return _config
+    return getattr(tracenest, "_ACTIVE_CONFIG", None)
 
 
 def _apply_custom_tags(span, request=None, on_request_span=None):
@@ -62,6 +64,46 @@ def _format_span_id(span_id_int: int) -> str:
     return f"{span_id_int:016x}"
 
 
+def _clean_ip(ip: str) -> str:
+    """Clean IP by removing port suffix or bracketed IPv6."""
+    cleaned = ip.strip()
+    if cleaned.startswith("[") and "]" in cleaned:
+        cleaned = cleaned[1:].split("]")[0]
+    elif ":" in cleaned and cleaned.count(":") == 1:
+        cleaned = cleaned.split(":")[0]
+    return cleaned.strip()
+
+
+def _resolve_client_address(request: Any, trusted_proxies: Optional[list] = None) -> Optional[str]:
+    """Resolve real client IP address walking X-Forwarded-For right-to-left against trusted proxies."""
+    if not hasattr(request, "META") or not isinstance(request.META, dict):
+        return None
+    remote = request.META.get("REMOTE_ADDR")
+    remote_ip = _clean_ip(str(remote)) if remote else None
+    if not remote_ip:
+        return None
+
+    trusted = set(trusted_proxies or [])
+    if not trusted or remote_ip not in trusted:
+        return remote_ip
+
+    xff = request.META.get("HTTP_X_FORWARDED_FOR")
+    if not xff:
+        return remote_ip
+
+    raw_hops = [h.strip() for h in str(xff).split(",") if h.strip()]
+    if not raw_hops:
+        return remote_ip
+
+    # Walk right-to-left: the rightmost hop not in trusted proxies is the real client
+    for hop in reversed(raw_hops):
+        clean_hop = _clean_ip(hop)
+        if clean_hop and clean_hop not in trusted:
+            return clean_hop
+
+    return remote_ip
+
+
 def _clean_regex_pattern(pattern: str) -> str:
     """Clean regex url pattern down to normalized route template."""
     p = str(pattern).lstrip("^").rstrip("$")
@@ -75,7 +117,9 @@ def _clean_regex_pattern(pattern: str) -> str:
     p = re.sub(r"\\d\+?", "*", p)
     p = re.sub(r"\\w\+?", "*", p)
 
-    if p and not p.startswith("/"):
+    if not p:
+        return "/"
+    if not p.startswith("/"):
         p = f"/{p}"
     return p
 
@@ -101,9 +145,9 @@ def _normalize_route(request, fallback_path: str) -> str:
         elif getattr(resolver_match, "url_name", None):
             route = resolver_match.url_name
     if not route:
-        route = fallback_path
+        route = "__unmatched__"
     route_str = str(route)
-    if route_str and not route_str.startswith("/"):
+    if route_str and not route_str.startswith("/") and route_str != "__unmatched__":
         route_str = f"/{route_str}"
     return route_str
 
@@ -113,23 +157,24 @@ def _preresolve_route(path: str) -> str:
 
     Child spans (DB, cache, outgoing HTTP, S3) end before the SERVER span
     learns its route from ``resolver_match``; they read the route published
-    from here via context vars instead. Falls back to the raw path when the
+    from here via context vars instead. Falls back to "__unmatched__" when the
     URLconf cannot resolve it (unmatched URL, Django not fully set up).
     """
-    fallback = path if path.startswith("/") else f"/{path}"
     try:
         from django.urls import resolve
 
         match = resolve(path)
-        route = getattr(match, "route", None) or getattr(match, "url_name", None) or path
+        route = getattr(match, "route", None) or getattr(match, "url_name", None)
+        if not route:
+            return "__unmatched__"
         route_str = str(route)
         if "^" in route_str or "(?P<" in route_str or "\\" in route_str or "$" in route_str:
             route_str = _clean_regex_pattern(route_str)
-        if route_str and not route_str.startswith("/"):
+        if route_str and not route_str.startswith("/") and route_str != "__unmatched__":
             route_str = f"/{route_str}"
         return route_str
     except Exception:
-        return fallback
+        return "__unmatched__"
 
 
 def _resolve_view_name(request, method: str) -> str:
@@ -220,9 +265,9 @@ def traced_get_response(wrapped, instance, args, kwargs):
         if url_query:
             span_attrs["url.query"] = url_query
         if hasattr(request, "META") and isinstance(request.META, dict):
-            remote_ip = request.META.get("REMOTE_ADDR")
-            xff = request.META.get("HTTP_X_FORWARDED_FOR")
-            client_ip = xff.split(",")[0].strip() if xff else remote_ip
+            cfg = attempt(_get_config, default=None, _label="request_config")
+            trusted = cfg.trusted_proxies if cfg else []
+            client_ip = _resolve_client_address(request, trusted)
             if client_ip:
                 span_attrs["client.address"] = str(client_ip)
                 span_attrs["http.client_ip"] = str(client_ip)
@@ -278,7 +323,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
                     error = True
                     status_code = 500
                     route_for_metrics = attempt(
-                        _normalize_route, request, path, default=path, _label="normalize_route"
+                        _normalize_route, request, path, default="__unmatched__", _label="normalize_route"
                     )
                     safe_set_attribute(span, "http.route", route_for_metrics)
                     safe_set_attribute(span, "http.response.status_code", 500)
@@ -293,7 +338,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
                         getattr, response, "status_code", default=200, _label="response.status_code"
                     )
                     norm_route = attempt(
-                        _normalize_route, request, path, default=path, _label="normalize_route"
+                        _normalize_route, request, path, default="__unmatched__", _label="normalize_route"
                     )
                     route_for_metrics = norm_route
                     view_name = attempt(
@@ -344,7 +389,8 @@ def traced_get_response(wrapped, instance, args, kwargs):
                             # W3C trace context so downstream consumers can correlate
                             # the response back to this trace without knowing our
                             # custom headers.
-                            response["traceparent"] = f"00-{trace_id_hex}-{span_id_hex}-01"
+                            trace_flags = f"{span_ctx.trace_flags:02x}"
+                            response["traceparent"] = f"00-{trace_id_hex}-{span_id_hex}-{trace_flags}"
 
                         attempt(_set_headers, _label="trace_headers")
 
