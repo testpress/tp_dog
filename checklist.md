@@ -13,7 +13,7 @@ This document tracks the status of all application-level, service-level, and req
 | [5. Request Trace and Waterfall](#5-request-trace-and-waterfall) | 2 | 2 | ✅ Complete |
 | [6. Service Performance Over Time](#6-service-performance-over-time) | 2 | 2 | ✅ Complete |
 | [7. Time-Period Comparison](#7-time-period-comparison) | 2 | 2 | ✅ Complete |
-| [8. Sampling and Retention](#8-sampling-and-retention) | 2 | 2 | ℹ️ Out of PoC Scope (SDK Implemented) |
+| [8. Sampling and Retention](#8-sampling-and-retention) | 2 | 2 | ℹ️ SDK Implemented (Policy Managed at Backend) |
 | [9. Overall User Flow](#9-overall-user-flow) | 1 | 1 | ✅ Complete |
 
 ---
@@ -25,7 +25,7 @@ This document tracks the status of all application-level, service-level, and req
 - [x] **Application & service-level latency, throughput, and error metrics**
   - *Details*: RED metrics (`apm_calls_total`, `apm_duration_milliseconds_bucket`) automatically derived from SDK spans via the OpenTelemetry Collector's `spanmetrics` connector and exported to Prometheus.
 - [x] **Endpoint-level request volume, throughput, latency, and error analysis**
-  - *Details*: Low-cardinality URL route normalization (`_normalize_route`) in Django integration (`src/tracenest/integrations/django/request.py`), aggregated per endpoint path in Prometheus and displayed on `tracenest_django_overview` and `tracenest_django_endpoint_details`.
+  - *Details*: Low-cardinality URL route normalization (`_normalize_route`) in Django integration (`src/tracenest/integrations/django/request.py`), aggregated per endpoint path in Prometheus and displayed in the generic service/operation dashboards (`$service=django`, `$operation=GET /api/products/…`).
 - [x] **Visibility into key services**:
   - [x] **Django application server**: Request handlers (`django.request`), middleware (`⚙️ django.middleware.*`), views (`🐍 django.view.*`), templates (`🎨 django.template:*`), cache operations (`django.cache.*`), and auth events (`🔐 django.auth.*`).
   - [x] **PostgreSQL primary database**: Driver cursor wrapping, sanitized SQL queries, `db.role="primary"`, PgBouncer connection pool topology detection (`🔵`).
@@ -37,7 +37,7 @@ This document tracks the status of all application-level, service-level, and req
 - [x] **Span waterfall visualization for individual requests**
   - *Details*: Grafana Tempo datasource rendering complete nested execution trees (middleware, views, templates, SQL queries, Redis ops, HTTP calls).
 - [x] **Filtering by application, service, endpoint, environment, status, and time range**
-  - *Details*: Grafana dashboard template variables (`$project`, `$cluster`, `$endpoint`, `$http_method`, `$instance`, `$query`, `$command`, `$severity`, `$Filters`) + Grafana native time-range picker.
+  - *Details*: Grafana dashboard template variables (`$project`, `$cluster`, `$service`, `$operation`, `$severity`, `$Filters`) + Grafana native time-range picker.
 - [x] **Performance comparison across different time periods**
   - *Details*: 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`), current 5m rate/latency comparison, deviation percentage calculation, and anomaly detection PromQL expressions embedded directly in Grafana dashboards (`tracenest_service_catalog.json`).
 
@@ -57,20 +57,16 @@ This document tracks the status of all application-level, service-level, and req
 ### 3. Service-Level Details
 
 - [x] **Dedicated service pages accessible via service selection**
-  - *Details*: Interactive links from Service Catalog dashboard (`tracenest_service_catalog`) linking directly to `/d/tracenest-django-overview`, `/d/tracenest-postgres-overview`, and `/d/tracenest-redis-overview`.
-- [x] **Django Service Page**
-  - *Details*: Displays URL endpoints table with Requests, Error Rate, Throughput, P50/P95/P99 Latency (`tracenest_django_overview.json`).
-- [x] **PostgreSQL Service Page**
-  - *Details*: Displays database queries, query volume, query latency (P50/P95/P99), error rate, database instance (Primary vs Replicas / PgBouncer), and performance over time (`tracenest_postgres_overview.json`).
-- [x] **Redis Service Page**
-  - *Details*: Displays Redis operations (`GET`, `SET`, `DELETE`, etc.), operation volume, latency, error rate, and command performance over time (`tracenest_redis_overview.json`).
+  - *Details*: Interactive links from the Service Catalog dashboard (`tracenest-project-catalog`) open `/d/generic-service-overview?var-service=<service>`. The six former component-specific dashboards were consolidated into this one generic dashboard.
+- [x] **Django, PostgreSQL, PgBouncer, and Redis Service Pages**
+  - *Details*: All four are served by `generic-service-overview.json` — each is a value of `$service` (`django`, `postgresql`, `pgbouncer`, `redis`, `requests`). The dashboard shows operations with Requests, Error Rate, Throughput, and P50/P95/P99 Latency, plus the Tempo trace list. No per-service dashboard is required.
 
 ---
 
 ### 4. Endpoint and Operation Instances
 
 - [x] **Instance list for selected endpoint, query, or Redis operation**
-  - *Details*: Dedicated details dashboards (`tracenest_django_endpoint_details.json`, `tracenest_postgres_query_details.json`, `tracenest_redis_command_details.json`) featuring embedded Tempo trace search panels ("Recent Traces & Flamegraph Waterfall for $endpoint / $query / $command").
+  - *Details*: A single details dashboard (`generic-operation-details.json`) with an embedded Tempo trace search panel ("Recent Traces & Flamegraph Waterfall for $operation"), replacing the three former per-component details dashboards.
 - [x] **Information to identify and investigate specific request/operation instances**
   - *Details*: Tempo trace list displaying trace IDs, duration, start timestamp, status code, and direct drill-down links ("🔥 Open Flamegraph Waterfall in Tempo").
 
@@ -94,7 +90,7 @@ This document tracks the status of all application-level, service-level, and req
 ### 6. Service Performance Over Time
 
 - [x] **Time-series graphs for performance over selected time ranges**
-  - *Details*: Time-series panels for request volume, P50/P75/P90/P95/P99 latency percentiles, and error rate over time on Django, Postgres, and Redis dashboards.
+  - *Details*: Time-series panels for request volume, P50/P90/P95/P99 latency percentiles, and error rate over time in the generic service dashboard, for any service.
 - [x] **Answering "Why is the application slow?" (Root Cause Isolation)**
   - *Details*: Downstream service latency breakdown panels ("% Time Spent by Downstream Service"), throughput comparison across components, and RPS baseline anomaly detection rules.
 
@@ -103,7 +99,7 @@ This document tracks the status of all application-level, service-level, and req
 ### 7. Time-Period Comparison
 
 - [x] **Compare performance across different time periods** (Today vs. previous day, This week vs. previous week, Before vs. after deployment)
-  - *Details*: Prometheus 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`) compared against 5m live rate, deviation percentage calculation, and embedded anomaly detection panels in `tracenest_service_catalog.json`.
+  - *Details*: Prometheus 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`) compared against 5m live rate, deviation percentage calculation, and embedded anomaly detection panels in `tracenest_service_catalog.json` and `tracenest_needs_attention.json`. *(Requires ≥7 days of Prometheus history to be meaningful.)*
 - [x] **Identify changes in Throughput, Latency, Error Rate, Request Volume**
   - *Details*: Global RPS anomaly list and anomaly threshold alerts (>50% anomaly, >200% severe anomaly).
 
@@ -112,17 +108,17 @@ This document tracks the status of all application-level, service-level, and req
 ### 8. Sampling and Retention
 
 - [x] **Configurable trace sampling**
-  - *Details*: Configurable `sample_rate` parameter in `tracenest.init()` and `TRACENEST_SAMPLE_RATE` / `OTEL_TRACES_SAMPLER_ARG` env vars using OpenTelemetry `TraceIdRatioBased` sampler. *(Full policy management deferred beyond PoC scope per requirement #8)*.
+  - *Details*: Configurable `sample_rate` parameter in `tracenest.init()` and `TRACENEST_SAMPLE_RATE` / `OTEL_TRACES_SAMPLER_ARG` env vars, plus per-route overrides via `TRACENEST_ENDPOINT_SAMPLE_RULES` and `TRACENEST_IGNORE_ENDPOINTS`, using the OpenTelemetry `TraceIdRatioBased` sampler under a `ParentBased` wrapper. *(Because RED metrics are derived from the sampled population, sampling policy must account for metric fidelity, not just storage cost.)*
 - [x] **Data retention**
-  - *Details*: Managed at backend storage tier (Tempo block retention & Prometheus TSDB retention config). *(Deferred beyond PoC scope per requirement #8)*.
+  - *Details*: Managed at the backend storage tier — Tempo `block_retention` (currently 336h / 14 days) and the Prometheus TSDB retention flag. *(No Prometheus retention flag is currently set, so it uses the 15-day / 2 GB default.)*
 
 ---
 
 ### 9. Overall User Flow
 
-- [x] **End-to-End Investigation Flow**: Application Dashboard → Select Service → Service Dashboard → Select Endpoint / Query / Operation → Instance List → Select Instance → Trace Waterfall → Root Cause.
+- [x] **End-to-End Investigation Flow**: Needs Attention → Service Catalog → Select Service → Select Operation → Instance List → Select Instance → Trace Waterfall → Root Cause.
   - *Details*: Fully wired navigation path across Grafana dashboards:
-    1. `tracenest_service_catalog` (Application & Service Catalog)
-    2. Click component link → `tracenest_django_overview` / `tracenest_postgres_overview` / `tracenest_redis_overview`
-    3. Click endpoint/query/command → `tracenest_django_endpoint_details` / `tracenest_postgres_query_details` / `tracenest_redis_command_details`
+    1. `tracenest-needs-attention` (triage) or `tracenest-project-catalog` (service health)
+    2. Click service row → `generic-service-overview?var-service=<service>`
+    3. Click operation row → `generic-operation-details?var-service=<service>&var-operation=<operation>`
     4. Click trace instance → Tempo Trace Waterfall in Grafana.

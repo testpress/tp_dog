@@ -1,6 +1,6 @@
-# TraceNest PoC — Decision Log
+# TraceNest — Decision Log
 
-This document records the key technical decisions made during the TraceNest APM PoC and the reasoning behind them.
+This document records the key technical decisions behind the TraceNest observability stack and the reasoning behind them.
 
 Each decision captures **what was chosen, why it was chosen, and the trade-offs introduced**.
 
@@ -10,7 +10,7 @@ Each decision captures **what was chosen, why it was chosen, and the trade-offs 
 
 **Why?**
 
-OpenTelemetry provides vendor-neutral APIs, SDKs, telemetry formats, and context propagation. The PoC uses OTLP for telemetry transport and W3C Trace Context for distributed tracing.
+OpenTelemetry provides vendor-neutral APIs, SDKs, telemetry formats, and context propagation. TraceNest uses OTLP for telemetry transport and W3C Trace Context for distributed tracing.
 
 This keeps the instrumentation layer independent from the backend. The same telemetry can be routed to systems such as Tempo, Jaeger, or other OTLP-compatible backends without rewriting application instrumentation.
 
@@ -23,7 +23,7 @@ OpenTelemetry introduces additional infrastructure and requires us to follow its
 
 **Why?**
 
-The standard instrumentation provides basic Django tracing, but the PoC requires deeper application visibility.
+The standard instrumentation provides basic Django tracing, but TraceNest requires deeper application visibility.
 
 Custom instrumentation allows us to capture:
 
@@ -97,7 +97,7 @@ Incorrect context lifecycle handling could result in attributes leaking between 
 
 **Why?**
 
-Basic database tracing is not enough for this PoC.
+Basic database tracing is not enough here.
 
 We need to understand:
 
@@ -120,15 +120,21 @@ Database-driver behavior becomes part of our instrumentation surface and require
 
 A slow database operation does not necessarily mean PostgreSQL itself is slow. Connection-pool contention (waiting for an available server connection) occurs before the query reaches PostgreSQL.
 
-By identifying PgBouncer connections separately, we can distinguish:
+By identifying PgBouncer connections separately, a query that traversed the
+pooler can be told apart from one that reached PostgreSQL directly:
 
 ```text
 Application
     ↓
-PgBouncer wait (Pool Contention / Queue)
+[span] 🔵 via PgBouncer  (db.connection.pool=pgbouncer, peer.service=pgbouncer)
     ↓
-PostgreSQL execution (Engine / Query Execution)
+[span] 🐘 direct to PostgreSQL  (peer.service=postgres[-<alias>])
 ```
+
+Pooler wait and engine execution are **not** split into two spans — a single
+span covers the whole round trip. They are separated analytically instead, by
+filtering on `db.connection.pool` / `peer.service` and comparing against the
+Collector-scraped `postgresql_*` engine metrics (see point 3 below).
 
 **How We Detect It:**
 1. **Connection Metadata Inspection**: At cursor execution time, `is_pgbouncer_connection()` inspects Django's active database connection settings:
@@ -149,12 +155,19 @@ Database performance needs to be analyzed by topology.
 
 A slow query against a read replica has a different investigation path from a slow query against the primary database.
 
-The PoC therefore attaches database-role information to database spans where it can be determined reliably.
+TraceNest therefore attaches database-role information to database spans where it can be determined reliably.
 
 **How We Detect It:**
-1. **Connection & Alias Heuristics**: `_detect_db_role()` inspects the Django database connection alias (e.g. `replica`, `slave`, `read`) and host/port attributes.
+1. **Alias & Map Heuristics**: Role is resolved from the Django database connection alias alone, in this precedence order:
+   - An exact match in `db_role_map` (`TRACENEST_DB_ROLE_MAP`).
+   - A case-insensitive match in `db_role_map`.
+   - A pattern match on the alias (`replica`, `slave`, `readonly`, `read`, optionally suffixed with digits or `db`).
+   - Otherwise `primary`.
+
+   Host and port are **not** consulted for role. If your alias naming does not
+   signal topology, set `TRACENEST_DB_ROLE_MAP` explicitly.
 2. **Explicit Span Attribution**: Emits `db.role` (`primary` or `replica`) on client database spans.
-3. **Multi-DB Routing Parity**: Supports Django multi-database routing topologies and two-tier DB router spans (`db_two_tier_spans=True`).
+3. **Multi-DB Routing Parity**: Supports Django multi-database routing topologies. A single CLIENT span carries both the connection alias (`peer.service`) and the physical database it resolved to (`db.name`), so routing is attributable without a second parent span.
 
 **Trade-off:**
 Role detection depends on deployment configuration and connection naming conventions.
@@ -229,7 +242,7 @@ The instrumentation remains dependent on the behavior of the underlying HTTP cli
 
 **Why?**
 
-AWS operations need to appear as dependency spans, but the PoC does not require a custom AWS telemetry engine.
+AWS operations need to appear as dependency spans, but TraceNest does not require a custom AWS telemetry engine.
 
 The integration captures useful information such as:
 
@@ -251,7 +264,7 @@ The application already produces spans containing timing and status information.
 
 Instead of maintaining another metric-calculation system inside every Python process, the Collector can derive request, error, and duration metrics from spans using the `spanmetrics` connector. The connector is specifically designed to aggregate RED metrics from span data.
 
-The PoC architecture is therefore:
+The architecture is therefore:
 
 ```text
 Application
@@ -289,7 +302,7 @@ If the Collector is unavailable because of:
 
 the application should continue processing requests.
 
-The PoC therefore wraps telemetry export with failure handling.
+TraceNest therefore wraps telemetry export with failure handling.
 
 **Trade-off:**
 Isolation means telemetry can be lost when the telemetry pipeline is unavailable. Reliability and loss behavior must therefore be measured separately.
@@ -335,7 +348,7 @@ Metrics tell us **that** something is wrong; traces help explain **why**.
 
 Prometheus exemplars provide a link between an aggregated metric measurement and a representative trace. Grafana supports using exemplars to jump from a Prometheus metric directly to a trace in Tempo.
 
-The intended workflow is:
+The workflow is:
 
 ```text
 Metric spike
@@ -360,7 +373,7 @@ This requires consistent configuration between the metrics system, Grafana, and 
 
 Sensitive data must be removed at the point of origin rather than relying on downstream collection layers.
 
-The PoC applies sanitization before telemetry is exported:
+TraceNest applies sanitization before telemetry is exported:
 
 * **SQL Queries**: Replaces numerical literals, string constants, and UUIDs with `%s` parameters to protect customer data and normalize query summaries.
 * **URLs**: Strips basic-auth credentials and sensitive URL query tokens.
@@ -387,17 +400,39 @@ Traces serve as the primary diagnostic signal for root-cause analysis (answering
 
 ---
 
-## Decision 18 — Treat this architecture as a PoC validation, not a production commitment
+## Decision 18 — Run the stack as a production system with explicit operational ownership
 
 **Why?**
 
-The PoC demonstrates technical feasibility and APM feature parity with commercial tools, but production adoption requires additional operational validation.
+TraceNest is the deployed APM system, not a feasibility exercise. That makes its
+cost profile and failure modes production concerns rather than validation
+outcomes, and it means the following are standing operational responsibilities
+rather than pre-adoption checks:
 
-Key areas to measure before full production rollout:
-* Application runtime CPU/latency overhead under high concurrency
-* Collector memory stability and buffer tuning under traffic bursts
-* Production sampling rates (e.g. 5–10% baseline vs. 100% on 5xx errors)
-* Multi-tenant backend storage sizing (S3/GCS object storage for Tempo)
+* **Application overhead** — measure SDK CPU/latency overhead per request under
+  production concurrency, and re-measure after Django or OpenTelemetry upgrades.
+* **Collector sizing** — the Collector sits on the critical path for *both*
+  traces and metrics. `memory_limiter` is deliberately configured below the
+  container limit, so raising traffic requires re-tuning the limiter, queue
+  depth, and `GOMEMLIMIT` together.
+* **Sampling policy** — head-based sampling is per-service via
+  `TRACENEST_SAMPLE_RATE`, with per-route overrides through
+  `TRACENEST_ENDPOINT_SAMPLE_RULES`. Because the Collector derives RED metrics
+  from the *sampled* population, dropping the sample rate also drops metric
+  fidelity. Errors should be forced to `1.0` rather than sampled down.
+* **Storage sizing** — Tempo `block_retention` (currently 14 days) and the
+  Prometheus TSDB retention flag are the two knobs that bound disk growth. The
+  7-day traffic-anomaly baseline in the Needs Attention dashboard requires at
+  least that much Prometheus history to be meaningful.
+* **The stack observes itself only partially** — the Collector publishes its own
+  telemetry on `:8888`, but Prometheus does not currently scrape it. Adding
+  that scrape job is the prerequisite for alerting on queue depth or memory
+  pressure.
+
+**Trade-off:**
+Committing to a self-hosted stack means the team owns its availability,
+upgrades, and capacity. The vendor-neutrality gained in Decision 1 is only
+realized if these operational costs are actually paid.
 
 ---
 
@@ -416,7 +451,7 @@ This diverges from strict OpenTelemetry semantic conventions (which mark 4xx as 
 
 # Decision Summary
 
-| Area                      | PoC Decision                        | Primary Benefit |
+| Area                      | Decision                             | Primary Benefit |
 | :------------------------ | :---------------------------------- | :-------------- |
 | **Telemetry Standard**    | OpenTelemetry (OTel)                | Vendor neutrality & open CNCF ecosystem |
 | **Transport Protocol**    | OTLP HTTP / gRPC                    | Universal telemetry format |
@@ -425,7 +460,7 @@ This diverges from strict OpenTelemetry semantic conventions (which mark 4xx as 
 | **Route Normalization**   | Django URL Resolver Matching        | Eliminates Prometheus metric series explosions |
 | **Route Attribution**     | In-flight `contextvars`             | Allows downstream DB/Redis metrics to filter by route |
 | **PostgreSQL Database**   | Custom Cursor Wrapper               | Primary vs. Replica role tagging & SQL sanitization |
-| **PgBouncer Pool**        | Dedicated Topology & `🔵` Icon Tag  | Distinguishes pool wait from Postgres query execution |
+| **PgBouncer Pool**        | Dedicated Topology & `🔵` Icon Tag  | Separates pooled round-trips from direct PostgreSQL |
 | **Redis Cache**           | Lightweight Wrapper                 | Command timing, pipeline depth & sensitive arg redaction |
 | **Outbound HTTP Calls**   | Lightweight `requests` Wrapper      | Outbound W3C header injection & visual `🌐` naming |
 | **AWS SDK (Boto3)**       | Lightweight Wrapper                 | Service, operation, and bucket identification |
@@ -436,6 +471,6 @@ This diverges from strict OpenTelemetry semantic conventions (which mark 4xx as 
 | **Spike-to-Trace UX**     | Prometheus Exemplars $\rightarrow$ Tempo | Instant jump from metric spike to trace waterfall |
 | **Data Privacy**          | Pre-Export Sanitization             | PII & credential scrubbing at the application boundary |
 | **Primary Signal**        | Traces (Tempo) + Metrics (Prometheus)| Comprehensive root-cause isolation & high-level health |
-| **PoC Objective**         | Technical Feasibility & Validation  | Validates Datadog APM replacement viability |
+| **Operating Model**       | Self-hosted with named ownership    | Vendor neutrality, paid for with explicit ops capacity |
 
 

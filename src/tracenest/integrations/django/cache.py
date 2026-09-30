@@ -82,7 +82,13 @@ def make_traced_cache_op(op_name: str):
         span_attrs = {
             "django.cache.operation": op_name,
             "django.cache.backend": backend_cls,
-            "db.system": "cache",
+            # Deliberately no db.system. The collector derives
+            # `normalized.service` from db.system when no peer.service exists
+            # (otel-collector-config.yaml), so "cache" here minted a phantom
+            # pseudo-service in the service dropdown and generic dashboards,
+            # double-counting the same work that the nested OTel Redis span
+            # already reports under db.system="redis". Cache latency belongs to
+            # the Django service, where it actually occurs.
         }
         if key is not None:
             if isinstance(key, (list, tuple, set)):

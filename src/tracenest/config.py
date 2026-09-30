@@ -108,13 +108,13 @@ class SDKConfig:
     template_enabled: bool = True
     cache_enabled: bool = True
     template_exclude: List[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE_PATTERNS))
-    db_two_tier_spans: bool = False
     tags: Dict[str, Any] = field(default_factory=dict)
     on_request_span: Optional[Callable] = None
     ignore_endpoints: List[str] = field(default_factory=list)
     endpoint_sample_rules: Dict[str, float] = field(default_factory=dict)
     trusted_proxies: List[str] = field(default_factory=list)
     db_role_map: Dict[str, str] = field(default_factory=dict)
+    auto_patch: bool = True
 
     @classmethod
     def from_env_and_kwargs(
@@ -133,6 +133,7 @@ class SDKConfig:
         debug: Optional[bool] = None,
         resource_attributes: Optional[Dict[str, Any]] = None,
         integrations: Optional[Dict[str, bool]] = None,
+        auto_patch: Optional[bool] = None,
         **extra: Any,
     ) -> "SDKConfig":
         """Build SDKConfig by prioritizing explicit kwargs over environment variables."""
@@ -274,13 +275,7 @@ class SDKConfig:
         else:
             resolved_cache_enabled = True
 
-        # 11. 2-Tier Database Spans (Datadog Parity: connection alias -> driver db name)
-        resolved_db_two_tier = _str_to_bool(
-            extra.get("db_two_tier_spans", os.getenv("TRACENEST_DB_TWO_TIER_SPANS", os.getenv("TRACENEST_DB_TWO_TIER", "false"))),
-            default=False,
-        )
-
-        # 12. Static tags / key-value metadata (applied to all spans and resources)
+        # 11. Static tags / key-value metadata (applied to all spans and resources)
         # Explicit kwargs tags override env vars entirely (consistent with other settings)
         kwarg_tags = tags if tags is not None else extra.get("tags")
         if kwarg_tags is not None:
@@ -298,21 +293,24 @@ class SDKConfig:
         # Merge custom arbitrary extra kwargs (e.g. server_location="us-east-1", team="core")
         KNOWN_EXTRA_KEYS = {
             "trace_nested_templates", "template_instrumentation", "TEMPLATE_INSTRUMENTATION",
-            "template_enabled", "template_exclude", "db_two_tier_spans", "tags",
+            "template_enabled", "template_exclude", "tags",
+            # Retired knobs, still listed so a stale caller cannot turn them into
+            # a resource tag via the custom-extra-kwargs merge below.
+            "db_two_tier_spans",
             "on_request_span", "ignore_endpoints", "IGNORE_ENDPOINTS",
             "endpoint_sample_rules", "endpoint_rules", "sample_rules", "ENDPOINT_SAMPLE_RULES",
             "service", "service_name", "cluster",
             "db_role_map", "DB_ROLE_MAP", "trusted_proxies", "TRUSTED_PROXIES",
-            "cache_enabled", "CACHE_ENABLED",
+            "cache_enabled", "CACHE_ENABLED", "auto_patch", "AUTO_PATCH",
         }
         for k, v in extra.items():
             if k not in KNOWN_EXTRA_KEYS and not k.startswith("_"):
                 resolved_tags[k] = v
 
-        # 13. Per-request span callback
+        # 12. Per-request span callback
         resolved_on_request_span = extra.get("on_request_span")
 
-        # 14. Endpoint sampling rules & ignores
+        # 13. Endpoint sampling rules & ignores
         kwarg_ignores = extra.get("ignore_endpoints") or extra.get("IGNORE_ENDPOINTS")
         if kwarg_ignores is not None:
             resolved_ignores = list(kwarg_ignores)
@@ -366,6 +364,16 @@ class SDKConfig:
         else:
             resolved_db_role_map = {}
 
+        # 14. Auto-patch
+        if auto_patch is not None:
+            resolved_auto_patch = bool(auto_patch)
+        elif "auto_patch" in extra and extra["auto_patch"] is not None:
+            resolved_auto_patch = _str_to_bool(extra["auto_patch"], default=True)
+        elif "TRACENEST_AUTO_PATCH" in os.environ:
+            resolved_auto_patch = _str_to_bool(os.environ["TRACENEST_AUTO_PATCH"], default=True)
+        else:
+            resolved_auto_patch = True
+
         return cls(
             project_name=resolved_project,
             cluster_name=resolved_cluster,
@@ -383,11 +391,11 @@ class SDKConfig:
             template_enabled=resolved_template_enabled,
             cache_enabled=resolved_cache_enabled,
             template_exclude=resolved_template_exclude,
-            db_two_tier_spans=resolved_db_two_tier,
             tags=resolved_tags,
             on_request_span=resolved_on_request_span,
             ignore_endpoints=resolved_ignores,
             endpoint_sample_rules=resolved_rules,
             trusted_proxies=resolved_trusted_proxies,
             db_role_map=resolved_db_role_map,
+            auto_patch=resolved_auto_patch,
         )

@@ -41,15 +41,24 @@ The Django integration provides complete lifecycle observability for inbound HTT
 
 ---
 
-## 2. PostgreSQL Integration (`psycopg2` & `psycopg3`)
+## 2. PostgreSQL Integration (`psycopg2`)
 
 Wraps database cursor execution to track queries, timing, and connection topology.
+Two seams are patched — Django's `execute_wrappers` and the database backend's
+`CursorWrapper` — and they are mutually exclusive via OpenTelemetry's
+`suppress_instrumentation` context, so a query produces exactly one span.
 
 | Span Name / Pattern | Kind | Description | Key Attributes |
 | :--- | :--- | :--- | :--- |
-| **`🐘 <sanitized_sql>`** | `CLIENT` | Direct PostgreSQL database query (e.g. `🐘 SELECT * FROM users WHERE id = ?`) | `db.system="postgresql"`, `db.statement`, `db.operation`, `db.role="primary"`, `db.instance` |
-| **`🔵 <sanitized_sql>`** | `CLIENT` | Query executed through **PgBouncer** connection pool | `db.system="postgresql"`, `db.statement`, `db.connection.pool="pgbouncer"`, `peer.service="pgbouncer"` |
+| **`🐘 <normalized_sql>`** | `CLIENT` | Direct PostgreSQL database query (e.g. `🐘 SELECT * FROM users WHERE id = ?`) | `db.system="postgresql"`, `db.statement`, `db.operation`, `db.role="primary"`, `db.instance` |
+| **`🔵 <normalized_sql>`** | `CLIENT` | Query executed through **PgBouncer** connection pool | `db.system="postgresql"`, `db.statement`, `db.connection.pool="pgbouncer"`, `peer.service="pgbouncer"` |
 | **`🐘 postgres.query`** | `CLIENT` | Fallback span name when SQL statement is empty or unavailable | `db.system="postgresql"`, `db.role`, `db.instance` |
+
+> **Span name vs. `db.statement`**: the span name and `db.statement` use the
+> *metric-normalized* form (comments stripped, `IN (…)` arity collapsed, batch
+> `VALUES` collapsed, bounded to 256 chars) to keep Prometheus cardinality low.
+> The fuller sanitized text is available on `db.statement.full` and
+> `db.query.text` (bounded to 4096 chars).
 
 ### Key Features
 - **SQL Sanitization**: Strips literals, IDs, strings, and sensitive values (e.g. `SELECT * FROM users WHERE email = 'bob@example.com'` $\rightarrow$ `SELECT * FROM users WHERE email = ?`).
@@ -68,8 +77,13 @@ Instruments Redis client commands and Django cache operations.
 | **`🔴 django_redis.cache.<op>`** | `INTERNAL` | Django cache operations (`get`, `set`, `delete_many`, etc.) | `django.cache.operation`, `django.cache.backend`, `django.cache.key`, `django.cache.hit` |
 
 ### Key Features
-- **Sensitive Command Redaction**: Arguments for commands like `AUTH`, `CONFIG`, and `PASSWORD` are automatically scrubbed.
+- **Sensitive Command Redaction**: Arguments for commands like `AUTH`, `CONFIG`, and `PASSWORD` are scrubbed. *This behaviour is inherited from the upstream `opentelemetry-instrumentation-redis` package — TraceNest registers no Redis hooks of its own, so the guarantees (and gaps) are that package's and move with its version.*
 - **Network Safety**: Masks internal IP addresses and formats socket connection targets cleanly.
+
+> **Known gaps**: RediSearch query arguments and document field values are
+> emitted raw by the upstream instrumentor, and Django cache keys are exported
+> verbatim on `django.cache.key` (unbounded for `get_many` / `delete_many`) —
+> a PII and cardinality risk.
 
 ---
 

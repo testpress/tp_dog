@@ -1,11 +1,13 @@
 
-# TraceNest Observability PoC
+# TraceNest Observability Stack
 
 ## 1. Overview
 
-**TraceNest** is an OpenTelemetry-based observability stack built as a **proof of concept for replacing Datadog APM capabilities** with an open, vendor-neutral architecture.
+**TraceNest** is an OpenTelemetry-based observability stack that **replaces
+Datadog APM** with an open, vendor-neutral architecture. It is deployed and in
+active use, not a feasibility exercise.
 
-The PoC combines:
+The stack combines:
 
 * **TraceNest SDK** for application instrumentation
 * **OpenTelemetry Collector** for telemetry processing and routing
@@ -13,7 +15,11 @@ The PoC combines:
 * **Prometheus** for metrics and time-series analysis
 * **Grafana** for dashboards, trace exploration, and incident investigation
 
-The primary objective of the PoC is to validate whether this architecture can provide the application performance visibility required for the Testpress environment while maintaining control over instrumentation, telemetry processing, dashboards, and storage.
+The architecture provides the application performance visibility the platform
+needs while keeping control over instrumentation, telemetry processing,
+dashboards, and storage. The trade-off of that control is that the team owns the
+stack's availability, upgrades, and capacity — see
+[`Decisions.md`](Decisions.md) (Decision 18).
 
 ---
 
@@ -30,9 +36,9 @@ Traditional APM platforms provide a single integrated experience for:
 * Dashboards
 * Root-cause investigation
 
-The PoC reproduces these capabilities using an OpenTelemetry-based architecture rather than relying on a single proprietary APM vendor.
+TraceNest provides these capabilities using an OpenTelemetry-based architecture rather than relying on a single proprietary APM vendor.
 
-The intended workflow is:
+The workflow it enables is:
 
 ```text
                          Application Issue
@@ -68,7 +74,7 @@ The goal is to move from **"something is slow"** to **"this specific operation c
 
 ```text
 ┌──────────────────────────────┐
-│        Testpress App         │
+│        Django App           │
 │                              │
 │        TraceNest SDK         │
 │                              │
@@ -175,10 +181,10 @@ tracenest.init()
 
 discovers supported integrations and applies runtime instrumentation.
 
-The current PoC includes instrumentation for:
+TraceNest provides instrumentation for:
 
 * Django
-* PostgreSQL (`psycopg2` / `psycopg3`)
+* PostgreSQL (`psycopg2`, via Django cursors and the upstream instrumentor)
 * PgBouncer
 * Redis
 * `django_redis`
@@ -280,7 +286,7 @@ AWS operations can be represented as dependency spans containing service, operat
 
 ## 8. Metrics
 
-The PoC derives application RED metrics directly from trace spans using the Collector's `spanmetrics` connector.
+TraceNest derives application RED metrics directly from trace spans using the Collector's `spanmetrics` connector.
 
 The primary metrics include:
 
@@ -323,7 +329,7 @@ Traces answer:
 
 > **Why is it happening?**
 
-The PoC connects the two through Prometheus exemplars.
+TraceNest connects the two through Prometheus exemplars.
 
 The intended investigation path is:
 
@@ -355,37 +361,47 @@ This allows an engineer to move from an aggregate metric such as latency or erro
 
 ## 10. Grafana Dashboards
 
-The PoC contains a set of pre-provisioned Grafana dashboards organized around operational investigation.
+Four pre-provisioned Grafana dashboards are shipped, organized around
+operational investigation.
+
+The first two are **generic**: they are driven entirely by the
+`normalized.service` and `normalized.operation` attributes the Collector's
+`transform/normalize` processor derives from spans, so they work for any
+instrumented service without new dashboards. Adding a service to the fleet
+automatically adds a row to the Service Catalog.
 
 The dashboard hierarchy moves from high-level health toward detailed diagnosis:
 
 ```text
-Needs Attention
-       │
+Needs Attention            tracenest-needs-attention
+       │  severity counters + detected-issue cards
        ▼
-Service Catalog
-       │
-       ├── Django
-       │     └── Endpoint Details
-       │
-       ├── PostgreSQL
-       │     └── Query Details
-       │
-       └── Redis
-             └── Command Details
+Service Catalog            tracenest-project-catalog
+       │  auto-detected services, throughput, % time by downstream
+       │  (one row per service, each linking to…)
+       ▼
+Generic Service Overview   generic-service-overview
+       │  $service drives the whole dashboard
+       │  operations table, each row drilling down to…
+       ▼
+Generic Operation Details  generic-operation-details
+          $operation: hits/errors/status split, latency,
+          TraceQL trace list → Tempo waterfall
 ```
+
+Concretely, the two generic dashboards cover what six component-specific
+dashboards used to: a **Django** service, **PostgreSQL**, **PgBouncer**, and
+**Redis** are all just values of `$service`, and each endpoint is a value of
+`$operation`. There is no per-service dashboard to create or maintain.
 
 The dashboards cover areas including:
 
-* Service health
-* Throughput
+* Service health and auto-detection
+* Throughput and downstream time attribution
 * Error rate
-* Latency
-* Slow endpoints
-* Database performance
-* Redis performance
-* Trace investigation
-* Resource usage
+* Latency (P50 / P95 / P99)
+* Per-operation drill-down
+* Trace investigation and waterfalls
 * Traffic anomalies
 
 Detailed dashboard behavior and navigation is documented in [`Dashboards.md`](Dashboards.md).
@@ -470,7 +486,9 @@ During the tested workload:
 * No OOM condition was observed.
 * The Collector continued processing trace and metric traffic.
 
-These results are workload-specific and should be treated as PoC validation rather than a production capacity guarantee.
+These results are workload-specific. They confirm the Collector runs comfortably
+inside its configured envelope for this traffic shape, but they are not a
+capacity guarantee for other workloads — re-measure before raising traffic.
 
 See [`Test_resource_usage.md`](Test_resource_usage.md).
 
@@ -478,7 +496,7 @@ See [`Test_resource_usage.md`](Test_resource_usage.md).
 
 ## 14. Key Design Decisions
 
-The PoC deliberately makes several architectural decisions.
+The stack deliberately makes several architectural decisions.
 
 | Area                      | Decision                          |
 | ------------------------- | --------------------------------- |
@@ -506,9 +524,10 @@ The reasoning behind these decisions and their trade-offs is documented in [`Dec
 
 ## 15. Sampling
 
-Sampling is an important part of the eventual production architecture because capturing every trace at high traffic volumes can become expensive.
+Capturing every trace at high traffic volumes is expensive, so sampling is
+configured per service rather than left at 100%.
 
-The PoC supports sampling strategies such as:
+TraceNest supports sampling strategies such as:
 
 * Head-based sampling
 * Parent-based sampling
@@ -517,13 +536,19 @@ Sampling is deliberately **head-based only**, applied in the SDK (`tracenest.sam
 
 The Collector receives the SDK's sampled trace population, derives RED metrics
 from it, and writes it to Tempo. Configure the head sample rate per service
-with `TRACENEST_SAMPLE_RATE` when storage capacity requires it.
+with `TRACENEST_SAMPLE_RATE`, and keep specific routes pinned to `1.0` with
+`TRACENEST_ENDPOINT_SAMPLE_RULES` (or drop noisy ones with
+`TRACENEST_IGNORE_ENDPOINTS`).
+
+Because RED metrics are derived from the **sampled** population, lowering the
+sample rate lowers metric fidelity as well as trace volume. Force error routes
+to `1.0` rather than sampling them down.
 
 ---
 
-## 16. Current PoC Scope
+## 16. Current Scope
 
-The current PoC demonstrates:
+The stack covers:
 
 * Application distributed tracing
 * Django request waterfalls
@@ -543,23 +568,49 @@ The current PoC demonstrates:
 
 ---
 
-## 17. PoC Limitations
+## 17. Current Limitations and Operational Debts
 
-This is a **technical feasibility and validation PoC**, not a production-ready replacement architecture.
+TraceNest is deployed and operational, but it is not feature-complete against a
+commercial APM. The following are known and accepted:
 
-Before production adoption, additional validation is required around:
+### Deliberate scope boundaries
 
-* Application CPU and latency overhead under production concurrency
-* Collector behavior during sustained traffic bursts
-* Collector memory and queue sizing
-* Telemetry loss during backend or network failures
-* Production sampling strategy
-* Trace storage sizing and retention
-* Multi-tenant storage architecture
-* Operational monitoring of the observability stack itself
-* Long-term dashboard and alert maintenance
+* **WSGI / synchronous Django only.** ASGI, async views, async middleware, and
+  streaming responses are not instrumented. The SDK wraps Django's sync
+  `BaseHandler.get_response` / `_get_response`; their async counterparts
+  (`get_response_async`, `_get_response_async`) are separate methods and are not
+  patched. Running under ASGI produces no `django.request` span.
+* **No Celery / background-task instrumentation.**
+* **Head-based sampling only.** No tail sampling in the Collector.
+* **Single-project label model.** `project_name` / `cluster_name` are set per
+  process via config or env; there is no multi-tenancy layer in front of Tempo.
 
-These areas should be validated using representative production workloads rather than relying only on the current PoC test.
+### Known gaps
+
+* **The observability stack is only partly self-observed.** The Collector
+  publishes its own telemetry on `:8888`, but Prometheus does not scrape it, so
+  there is no alerting on Collector queue depth or memory pressure.
+* **No Prometheus recording or alerting rules.** Every detection rule is hand-written
+  PromQL embedded in a Grafana panel, evaluated at refresh. Nothing pages anyone.
+* **The traffic-anomaly baseline needs 7 days of history.** That Needs Attention
+  card compares against a `quantile_over_time(...[7d:1h])` baseline, so it cannot
+  fire on a freshly provisioned Prometheus.
+* **Cardinality safety depends on SQL sanitization.** `db.statement` is a
+  `spanmetrics` dimension. Bounded cardinality is a property of
+  `sanitize_sql()`, not of the collector configuration.
+* **Cached key attributes are exported raw** (`django.cache.key`), which is both a
+  PII risk and a cardinality risk for `get_many`/`delete_many`.
+* **Function-based middleware is skipped**; only class-based middleware is
+  instrumented.
+* **PromQL is untested.** The large `label_join`/`label_replace` chains in the
+  dashboards are validated by eye, not by CI.
+
+### Standing operational work
+
+Re-measure application overhead after Django or OpenTelemetry upgrades; keep
+Collector `memory_limiter` / `GOMEMLIMIT` / queue depth aligned with traffic;
+review Tempo `block_retention` and the Prometheus retention flag as data grows;
+and maintain dashboards and sampling policy as routes change.
 
 ---
 
@@ -582,11 +633,11 @@ The detailed documentation is split by concern:
 
 ## 19. Summary
 
-The TraceNest PoC demonstrates an end-to-end observability architecture based on OpenTelemetry:
+The TraceNest stack provides an end-to-end observability architecture based on OpenTelemetry:
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
-│                        TraceNest PoC                       │
+│                    TraceNest Observability                  │
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
 │ Application                                                │
@@ -612,4 +663,9 @@ The architecture provides a unified workflow:
 
 Metrics provide the high-level operational view, while distributed traces provide the detailed execution path needed for root-cause analysis.
 
-The PoC therefore validates the core technical building blocks required for an OpenTelemetry-based APM platform while clearly separating **demonstrated capabilities** from **production-scale validation that remains to be completed**.
+TraceNest provides the core building blocks of an OpenTelemetry-based APM
+platform: instrumented Django request waterfalls, collector-derived RED
+metrics, and a metrics-to-trace investigation path. The remaining work is
+operational — capacity, retention, self-monitoring, and alerting — rather than
+architectural. Known limitations are listed in
+[Current Limitations and Operational Debts](#17-current-limitations-and-operational-debts).

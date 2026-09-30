@@ -124,6 +124,20 @@ def _clean_regex_pattern(pattern: str) -> str:
     return p
 
 
+def _finalize_route_str(route_str: str) -> str:
+    """Shared tail of route normalization.
+
+    Regex-clean a raw URL pattern when needed, then ensure a leading slash.
+    Used by both the pre-handler and post-handler route paths so they cannot
+    drift apart.
+    """
+    if "^" in route_str or "(?P<" in route_str or "\\" in route_str or "$" in route_str:
+        route_str = _clean_regex_pattern(route_str)
+    if route_str and not route_str.startswith("/") and route_str != "__unmatched__":
+        route_str = f"/{route_str}"
+    return route_str
+
+
 def _normalize_route(request, fallback_path: str) -> str:
     """Low-cardinality http.route from resolver_match, never raw URL with IDs."""
     resolver_match = getattr(request, "resolver_match", None)
@@ -146,33 +160,55 @@ def _normalize_route(request, fallback_path: str) -> str:
             route = resolver_match.url_name
     if not route:
         route = "__unmatched__"
-    route_str = str(route)
-    if route_str and not route_str.startswith("/") and route_str != "__unmatched__":
-        route_str = f"/{route_str}"
-    return route_str
+    return _finalize_route_str(str(route))
 
 
-def _preresolve_route(path: str) -> str:
+def _prime_request(span: Any, request: Any) -> Any:
+    """Bind the span and trace ids onto the request before the handler runs.
+
+    Returns the span's ``SpanContext`` when it could be read, else ``None``.
+    The caller needs those ids for the ``X-Trace-ID`` / ``traceparent``
+    response headers, which must survive a failure to bind onto the request.
+
+    This runs *before* the application call, so every step is guarded
+    individually. A hostile span object, a request with ``__slots__``, or a
+    read-only ``trace_id`` property must degrade to "run the application
+    anyway", never prevent it from executing at all.
+    """
+    span_ctx = attempt(span.get_span_context, default=None, _label="prime_span_context")
+
+    def _bind() -> None:
+        request._tp_span = span
+        if span_ctx is not None:
+            request.trace_id = _format_trace_id(span_ctx.trace_id)
+            request.span_id = _format_span_id(span_ctx.span_id)
+        _apply_custom_tags(span, request)
+
+    attempt(_bind, _label="prime_request")
+    return span_ctx
+
+
+def _preresolve_route(path: str, urlconf: Any = None) -> str:
     """Best-effort normalized route resolved BEFORE the handler runs.
 
     Child spans (DB, cache, outgoing HTTP, S3) end before the SERVER span
     learns its route from ``resolver_match``; they read the route published
     from here via context vars instead. Falls back to "__unmatched__" when the
     URLconf cannot resolve it (unmatched URL, Django not fully set up).
+
+    ``path`` must be ``request.path_info`` (SCRIPT_NAME already stripped), which
+    is what Django itself resolves against -- passing ``request.path`` fails
+    outright on any sub-path mount. ``urlconf`` honours a per-request URLconf
+    installed by middleware.
     """
     try:
         from django.urls import resolve
 
-        match = resolve(path)
+        match = resolve(path, urlconf=urlconf)
         route = getattr(match, "route", None) or getattr(match, "url_name", None)
         if not route:
             return "__unmatched__"
-        route_str = str(route)
-        if "^" in route_str or "(?P<" in route_str or "\\" in route_str or "$" in route_str:
-            route_str = _clean_regex_pattern(route_str)
-        if route_str and not route_str.startswith("/") and route_str != "__unmatched__":
-            route_str = f"/{route_str}"
-        return route_str
+        return _finalize_route_str(str(route))
     except Exception:
         return "__unmatched__"
 
@@ -285,7 +321,15 @@ def traced_get_response(wrapped, instance, args, kwargs):
                 span_attrs["network.protocol.version"] = str(server_proto)
                 span_attrs["http.flavor"] = str(server_proto)
 
-        preresolved_route = _preresolve_route(path)
+        # Resolve against path_info (what Django itself resolves against),
+        # never request.path -- the latter still carries SCRIPT_NAME, so on a
+        # sub-path mount every route pre-resolves to __unmatched__ and, via
+        # RouteEnrichingSpanProcessor, poisons every child span in the request.
+        # A per-request URLconf set by middleware is honoured too.
+        resolve_path = getattr(request, "path_info", None) or path
+        preresolved_route = _preresolve_route(
+            resolve_path, getattr(request, "urlconf", None)
+        )
         if preresolved_route:
             span_attrs["http.route"] = preresolved_route
 
@@ -301,14 +345,15 @@ def traced_get_response(wrapped, instance, args, kwargs):
                 context=parent_ctx,
                 kind=SpanKind.SERVER,
                 attributes=span_attrs,
+                # This wrapper records errors itself on the paths below, so OTel's
+                # automatic handling is disabled -- otherwise the exception is
+                # recorded twice and set_status is called twice for one failure.
+                record_exception=False,
+                set_status_on_exception=False,
             ) as span:
-                span_ctx = span.get_span_context()
-                trace_id_hex = _format_trace_id(span_ctx.trace_id)
-                span_id_hex = _format_span_id(span_ctx.span_id)
-                request._tp_span = span
-                request.trace_id = trace_id_hex
-                request.span_id = span_id_hex
-                _apply_custom_tags(span, request)
+                span_ctx = _prime_request(span, request)
+                trace_id_hex = _format_trace_id(span_ctx.trace_id) if span_ctx is not None else ""
+                span_id_hex = _format_span_id(span_ctx.span_id) if span_ctx is not None else ""
 
                 status_code = 200
                 error = False
@@ -382,7 +427,9 @@ def traced_get_response(wrapped, instance, args, kwargs):
                         safe_set_attribute(span, "error", False)
                         safe_set_status(span, StatusCode.OK)
 
-                    if hasattr(response, "headers") or hasattr(response, "__setitem__"):
+                    if span_ctx is not None and (
+                        hasattr(response, "headers") or hasattr(response, "__setitem__")
+                    ):
                         def _set_headers() -> None:
                             response["X-Trace-ID"] = trace_id_hex
                             response["X-Span-ID"] = span_id_hex

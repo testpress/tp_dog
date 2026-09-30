@@ -21,6 +21,9 @@ _BUILTIN_INTEGRATIONS: Dict[str, str] = {
 _INTEGRATION_ALIASES: Dict[str, str] = {
     "postgresql": "postgres",
     "psycopg2": "postgres",
+    # Driver name, not a support claim: Django projects on the psycopg3 driver
+    # are traced through the Django seams. A non-Django project using raw psycopg3
+    # is NOT traced (PostgresIntegration.is_installed does not probe it).
     "psycopg": "postgres",
     "http": "requests",
     "urllib3": "requests",

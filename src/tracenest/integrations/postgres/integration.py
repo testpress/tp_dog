@@ -1,4 +1,21 @@
-"""PostgresIntegration — wraps Django DB connections/cursors and psycopg2/psycopg driver cursors."""
+"""PostgresIntegration — traces Django DB queries, plus raw psycopg2 cursors.
+
+Two independent seams, with different driver support:
+
+* **Django path** (steps 1-2) hooks ``Connection.execute_wrappers`` and
+  ``django.db.backends.utils.CursorWrapper``. These are Django-level seams, so
+  this path is *driver-agnostic* and already traces psycopg3 when Django is
+  configured with it (Django >= 4.1 supports psycopg 3 as its driver).
+* **Raw driver path** (step 3) installs OTel's ``Psycopg2Instrumentor``, which
+  covers psycopg2 only. psycopg 3 has no equivalent wired up here.
+
+``is_installed`` deliberately probes only Django and psycopg2. Reporting psycopg3
+as installed would claim support the raw path cannot deliver, and would report
+the integration as instrumented while emitting no spans at all on a non-Django
+host. The ``"psycopg"`` alias in the manager still resolves to this integration,
+so ``enable=["psycopg"]`` keeps working for Django projects on the psycopg3
+driver.
+"""
 
 import importlib
 import logging
@@ -29,14 +46,10 @@ class PostgresIntegration(BaseIntegration):
         except ImportError:
             pass
 
-        has_psycopg3 = False
-        try:
-            importlib.import_module("psycopg")
-            has_psycopg3 = True
-        except ImportError:
-            pass
-
-        return has_django_db or has_psycopg2 or has_psycopg3
+        # psycopg (v3) is intentionally NOT probed: only the Django path traces
+        # it, and probing it would report this integration as installed on a
+        # non-Django host where it emits no spans. See the module docstring.
+        return has_django_db or has_psycopg2
 
     def _apply_patch(self) -> None:
         from . import cursor as _cursor

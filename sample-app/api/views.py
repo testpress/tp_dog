@@ -26,12 +26,76 @@ class BurstRateThrottle(AnonRateThrottle):
 
 
 
+# Buckets already confirmed to exist, per process. Bootstrapping on every
+# request would add a HeadBucket span to each cycle and pollute the operation
+# mix the load test is trying to measure. Stale if a bucket is deleted mid-run,
+# which the per-op error path reports honestly anyway.
+_VERIFIED_BUCKETS = set()
+
+
 class S3StorageView(APIView):
-    """API view executing S3 / boto3 object storage operation (with graceful fallback)."""
+    """API view executing one S3 / boto3 object storage operation (with graceful fallback).
+
+    The operation is selected with ``?op=``: ``list`` (default), ``put``,
+    ``get``, ``delete`` or ``head``. Calling the endpoint with no ``op``
+    preserves the original head_bucket + list_objects_v2 behaviour.
+
+    S3 failures are deliberately swallowed and returned as HTTP 200 with a
+    descriptive ``status`` -- a broken MinIO should not look like a broken
+    endpoint. That means callers must check the ``ok`` field rather than the
+    HTTP status code; ``status: "simulated"`` additionally means botocore was
+    absent, so no boto spans were emitted at all.
+    """
+
+    DEFAULT_BUCKET = "sample-products-bucket"
+    DEFAULT_KEY = "inventory/products.json"
+    VALID_OPS = ("list", "put", "get", "delete", "head")
+
+    @staticmethod
+    def _ensure_bucket(client, bucket_name):
+        """Best-effort bucket bootstrap, once per process per bucket."""
+        if bucket_name in _VERIFIED_BUCKETS:
+            return
+        try:
+            client.head_bucket(Bucket=bucket_name)
+        except Exception:
+            try:
+                client.create_bucket(Bucket=bucket_name)
+            except Exception:
+                pass
+        _VERIFIED_BUCKETS.add(bucket_name)
+
+    @staticmethod
+    def _run_op(client, op, bucket_name, key):
+        """Dispatch one S3 operation. Returns a representative size/int."""
+        if op == "put":
+            # Unique-ish body so the write is a real write, not a no-op overwrite.
+            body = b'{"product":"widget","stock":10}'
+            client.put_object(Bucket=bucket_name, Key=key, Body=body)
+            return len(body)
+
+        if op == "get":
+            res = client.get_object(Bucket=bucket_name, Key=key)
+            return int(res.get("ContentLength", 0))
+
+        if op == "delete":
+            client.delete_object(Bucket=bucket_name, Key=key)
+            return 0
+
+        if op == "head":
+            res = client.head_object(Bucket=bucket_name, Key=key)
+            return int(res.get("ContentLength", 0))
+
+        # "list" (default): the original behaviour.
+        res = client.list_objects_v2(Bucket=bucket_name, Prefix="inventory/")
+        return len(str(res))
 
     def get(self, request):
-        bucket_name = request.GET.get("bucket", "sample-products-bucket")
-        key = request.GET.get("key", "inventory/products.json")
+        bucket_name = request.GET.get("bucket", self.DEFAULT_BUCKET)
+        key = request.GET.get("key", self.DEFAULT_KEY)
+        op = request.GET.get("op", "list").lower()
+        if op not in self.VALID_OPS:
+            op = "list"
 
         try:
             import os
@@ -52,38 +116,38 @@ class S3StorageView(APIView):
             content_length = 42
 
             try:
-                try:
-                    client.head_bucket(Bucket=bucket_name)
-                except Exception:
-                    try:
-                        client.create_bucket(Bucket=bucket_name)
-                    except Exception:
-                        pass
-                res = client.list_objects_v2(Bucket=bucket_name, Prefix="inventory/")
-                content_length = len(str(res))
+                self._ensure_bucket(client, bucket_name)
+                content_length = self._run_op(client, op, bucket_name, key)
             except (BotoCoreError, ClientError, Exception) as err:
                 status_msg = f"traced_s3_call ({err.__class__.__name__})"
 
             return Response({
                 "storage": "s3",
+                "op": op,
                 "bucket": bucket_name,
                 "key": key,
                 "status": status_msg,
+                "ok": status_msg == "success",
                 "bytes": content_length,
             })
         except ImportError:
             return Response({
                 "storage": "s3",
+                "op": op,
                 "bucket": bucket_name,
                 "key": key,
                 "status": "simulated",
+                "ok": True,
                 "bytes": 42,
             })
         except Exception as exc:
             return Response({
                 "storage": "s3",
+                "op": op,
                 "bucket": bucket_name,
+                "key": key,
                 "status": "handled_exception",
+                "ok": False,
                 "message": str(exc),
             })
 

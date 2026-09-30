@@ -66,6 +66,36 @@ def test_django_redis_cache_tracing(memory_exporter):
     assert span.attributes["django.cache.hit"] is True
 
 
+def test_cache_span_does_not_claim_a_db_system(memory_exporter):
+    """Cache spans must not set db.system, which would mint a phantom service.
+
+    The collector derives ``normalized.service`` from ``db.system`` whenever a
+    span has no ``peer.service`` (otel-collector-config.yaml, transform/normalize).
+    Setting ``db.system="cache"`` therefore produced a service literally named
+    "cache" in the ``$service`` dropdown of both generic dashboards, splitting
+    Django cache work away from the Django service and double-counting it against
+    the nested OTel Redis span that already reports ``db.system="redis"``.
+    """
+    from tracenest.integrations.django.cache import make_traced_cache_op
+
+    class FakeRedisCache:
+        __module__ = "django_redis.cache"
+
+        def get(self, key):
+            return "v"
+
+    traced_get = make_traced_cache_op("get")
+    traced_get(lambda k: FakeRedisCache().get(k), FakeRedisCache(), ("k",), {})
+
+    span = memory_exporter.get_finished_spans()[0]
+    assert "db.system" not in span.attributes
+    assert "db.system.name" not in span.attributes
+    assert "peer.service" not in span.attributes
+    # Still fully identifiable as a cache op without the wrong attribute.
+    assert span.attributes["django.cache.operation"] == "get"
+    assert span.attributes["django.cache.backend"] == "FakeRedisCache"
+
+
 def test_non_redis_cache_not_misclassified(memory_exporter):
     """Verify that a non-Redis backend with 'redis' in module name (e.g. myapp.redis_helpers) is not misclassified."""
     from tracenest.integrations.django.cache import make_traced_cache_op

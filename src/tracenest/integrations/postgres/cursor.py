@@ -120,7 +120,7 @@ def _extract_django_db_meta(instance_or_conn: Any) -> Tuple[str, str, str, str, 
         db_role = db_role_map[alias_str]
     elif alias_str.lower() in db_role_map:
         db_role = db_role_map[alias_str.lower()]
-    elif re.search(r"(?:^|[_\-\b])(replica|slave|readonly|read)(?:$|[_\-\b0-9]|db\b)", alias_str, re.IGNORECASE):
+    elif re.search(r"(?:^|[_\-])(?:replica|slave|readonly|read)(?:\d+|\d*db)?(?:$|[_\-])", alias_str, re.IGNORECASE):
         db_role = "replica"
     else:
         db_role = "primary"

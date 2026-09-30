@@ -240,6 +240,47 @@ def test_db_role_map_and_false_positive_prevention():
     assert spans[3].attributes["db.role"] == "primary"
 
 
+@pytest.mark.parametrize(
+    "alias,expected",
+    [
+        # Replica keywords as a separator-delimited token.
+        ("slave1db", "replica"),
+        ("slave1", "replica"),
+        ("slave2db", "replica"),
+        ("replica", "replica"),
+        ("replica1", "replica"),
+        ("replica-prod", "replica"),
+        ("readonly", "replica"),
+        ("read", "replica"),
+        ("read_replica", "replica"),
+        ("db_slave1", "replica"),
+        # Must not be misread as replicas: "read"/"thread" substrings.
+        ("default", "primary"),
+        ("thread_pool", "primary"),
+        ("readiness_probe", "primary"),
+        ("readwrite", "primary"),
+        ("courses", "primary"),
+    ],
+)
+def test_replica_alias_heuristic_contract(alias, expected):
+    """Lock in the alias -> db.role contract.
+
+    Role detection is a name heuristic plus the explicit ``db_role_map`` escape
+    hatch. This pins the shapes it does and does not match so a future regex
+    edit cannot silently reclassify an alias (which would split peer.service
+    series and make replica lag look like zero). ``myreplica``-style names with
+    no separator before the keyword are intentionally unsupported -- use
+    ``db_role_map`` for those.
+    """
+    exporter = InMemorySpanExporter()
+    tracenest.init(project_name="postgres-role-contract", exporter=exporter, export_batch=False)
+
+    CursorWrapper(MockRawCursor(), MockDatabaseConnection(alias=alias)).execute("SELECT 1")
+
+    span = exporter.get_finished_spans()[0]
+    assert span.attributes["db.role"] == expected
+
+
 def test_reentrancy_guard_prevents_duplicate_spans():
     """Verify that re-entrant cursor executions do not create duplicate spans."""
     exporter = InMemorySpanExporter()
@@ -421,6 +462,50 @@ def test_raw_psycopg_cursor_exec():
     assert integration.name == "postgres"
 
 
+def test_is_installed_does_not_claim_psycopg3_support():
+    """psycopg3 alone must not report the integration as installed.
+
+    Only the Django seams trace psycopg3; the raw-driver seam is psycopg2-only.
+    Probing psycopg3 made a psycopg3-only host report "postgres: instrumented"
+    while emitting no spans at all, which is worse than reporting nothing.
+    """
+    import tracenest.integrations.postgres.integration as pg_int
+
+    class _Psycopg3OnlyHost:
+        """A non-Django host on psycopg3: psycopg imports, nothing else does."""
+
+        @staticmethod
+        def import_module(name):
+            if name == "psycopg":
+                return object()
+            raise ImportError(f"simulated: {name} is not installed")
+
+    integration = PostgresIntegration()
+    original = pg_int.importlib
+    pg_int.importlib = _Psycopg3OnlyHost
+    try:
+        assert integration.is_installed() is False
+    finally:
+        pg_int.importlib = original
+
+
+def test_django_path_is_driver_agnostic():
+    """The Django seams bind to no driver, so psycopg3 needs no special case.
+
+    This is why removing the psycopg3 probe costs nothing for a Django project
+    on the psycopg3 driver: cursor.py builds the spans from duck-typed metadata,
+    so the same code path serves psycopg2 and psycopg3.
+    """
+    import inspect
+
+    from tracenest.integrations.postgres import cursor as cur
+
+    source = inspect.getsource(cur)
+    # Covers "import psycopg2" as well, since it contains "import psycopg".
+    assert "import psycopg" not in source
+    assert "from psycopg" not in source
+
+
 
 def test_extract_operation_fallback():
     """Verify operation extraction falls back to QUERY for empty or unknown SQL."""
@@ -449,10 +534,12 @@ def test_extract_query_summary():
     assert extract_query_summary("COMMIT") == "COMMIT"
 
 
-def test_two_tier_db_spans_datadog_parity():
-    """Verify db_two_tier_spans=True produces Datadog-parity nested spans:
-    Tier 1 (parent): Connection Router / DB Alias (slave3db)
-    Tier 2 (child): Physical Database / Driver Query (testpress)
+def test_db_span_carries_alias_and_physical_db_name():
+    """A single CLIENT span carries both the Django connection alias and the
+    physical database it resolved to, which is how primary/replica routing is
+    attributed without a second parent span.
+
+    slave3db (alias) -> testpress (physical database)
     """
     tracenest._reset_for_testing()
     exporter = InMemorySpanExporter()
@@ -460,7 +547,6 @@ def test_two_tier_db_spans_datadog_parity():
         project_name="postgres-test-svc",
         exporter=exporter,
         export_batch=False,
-        db_two_tier_spans=True,
     )
     from tracenest.integrations import get_integration_manager
     mgr = get_integration_manager()

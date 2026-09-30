@@ -101,6 +101,7 @@ def init(
             debug=debug,
             resource_attributes=resource_attributes,
             integrations=integrations,
+            auto_patch=auto_patch,
             **kwargs,
         )
         _ACTIVE_CONFIG = config
@@ -205,7 +206,7 @@ def init(
         set_global_textmap(TraceContextTextMapPropagator())
 
         # Auto-patch installed integrations if requested
-        if auto_patch and not config.disabled:
+        if config.auto_patch and not config.disabled:
             try:
                 manager = get_integration_manager()
                 manager.apply_integrations(config=config)

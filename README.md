@@ -6,7 +6,7 @@ TraceNest is an OpenTelemetry-based observability SDK for synchronous Django app
 
 For a comprehensive overview of the architecture, components, workflows, and decision log, see:
 
-- [**TraceNest Observability PoC Overview**](docs/Overview.md) — Complete end-to-end technical overview, architecture, component breakdown, resource usage benchmarks, and decision index.
+- [**TraceNest Observability Overview**](docs/Overview.md) — Complete end-to-end technical overview, architecture, component breakdown, resource usage benchmarks, current limitations, and decision index.
 - [**Operations Runbook**](docs/Runbook.md) — On-call operational guide, 6 essential questions with single-line answers, emergency killswitches, and collector diagnostics.
 
 ---
@@ -192,6 +192,27 @@ Open Grafana at [http://localhost:3000](http://localhost:3000), then open the Te
 
 Select a `django.request` trace to open its full waterfall. Middleware timings are inclusive because Django middleware is nested: do not add their durations together.
 
+### Load test S3 and confirm the boto spans land
+
+`loadtest_s3.py` drives the sample app's S3 endpoint under controlled concurrency, reports per-operation latency, and then verifies against Tempo that the matching boto spans were actually recorded.
+
+```bash
+./loadtest_s3.py                          # 10s, 4 workers, put/get/delete
+./loadtest_s3.py -d 60 -c 16 -r 50        # 60s, 16 workers, capped at 50 req/s
+./loadtest_s3.py -n 200 --ops put,get     # exactly 200 requests
+./loadtest_s3.py --require-traces         # exit 2 if no S3 spans reach Tempo
+```
+
+Operations are selected with `--ops` from `put`, `get`, `delete`, `list`, `head`; the default `put,get,delete` runs as a sequence so each key is written, read, then removed. `get` and `delete` on a key that was never written return an S3 error, so include `put` first.
+
+The script checks the JSON body's `ok` field rather than only the HTTP status code. `S3StorageView` deliberately swallows backend errors and answers HTTP 200 with `ok: false`, so an HTTP-only check would report 100% success against a dead MinIO. A `status` of `simulated` additionally means botocore was not importable in the app, so no boto spans were emitted at all.
+
+Boto spans are named `S3.<Operation>` and are rewritten by the collector to `normalized.service = "aws-s3"`, so they appear under the `aws-s3` service in the generic dashboards. Search for them with:
+
+```traceql
+{ name =~ "S3.*" }
+```
+
 ## Verify the SDK
 
 ```bash
@@ -203,6 +224,6 @@ Select a `django.request` trace to open its full waterfall. Middleware timings a
 
 ## Scope and capabilities
  
-- **Supported Frameworks & Storage**: Full auto-instrumentation for Django (WSGI/synchronous), PostgreSQL (primary & replica routing), PgBouncer connection pooling, Redis caching & pipelines, HTTP client (`requests`), and AWS Boto3 SDK.
-- **Dashboards**: 8 pre-provisioned Grafana dashboards covering Service Catalog, Needs Attention (triage), Django Overview & Endpoints, PostgreSQL Overview & Query Details, and Redis Overview & Commands.
-- **Out of Current Scope**: ASGI / async views / async middleware, Celery background tasks, and streaming HTTP responses.
+- **Supported Frameworks & Storage**: Full auto-instrumentation for Django (WSGI/synchronous), PostgreSQL (primary & replica routing, `psycopg2`), PgBouncer connection pooling, Redis caching & pipelines, HTTP client (`requests`), and AWS Boto3 SDK.
+- **Dashboards**: 4 pre-provisioned Grafana dashboards — Needs Attention (triage), Service Catalog, and two **generic** service/operation dashboards that cover any instrumented service. Django, PostgreSQL, PgBouncer, and Redis are values of a `$service` variable, not separate dashboards, so new services are picked up automatically.
+- **Out of Current Scope**: ASGI / async views / async middleware, Celery background tasks, streaming HTTP responses, and function-based middleware.

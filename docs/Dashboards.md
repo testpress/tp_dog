@@ -1,45 +1,62 @@
 # Grafana Dashboards & Navigation Guide
 
-This guide covers the **8 pre-provisioned Grafana APM dashboards** in the TraceNest observability stack, explaining **how each dashboard is structured, how to navigate between them, and how to execute end-to-end incident triage and root cause analysis**.
+This guide covers the **4 pre-provisioned Grafana APM dashboards** in the
+TraceNest observability stack, explaining how each is structured, how to
+navigate between them, and how to execute end-to-end incident triage.
+
+> **Why only 4?** The suite originally shipped 8 dashboards — two generic
+> (Service Catalog, Needs Attention) plus six component-specific ones (Django
+> Overview/Endpoint, PostgreSQL Overview/Query, Redis Overview/Command). The six
+> component-specific dashboards were consolidated into two **generic** dashboards
+> driven by the `normalized.service` / `normalized.operation` attributes that the
+> Collector's `transform/normalize` processor derives from spans. A service is
+> now a *value of a variable*, not a dashboard. Django, PostgreSQL, PgBouncer,
+> and Redis all work through the same two panels, and a newly instrumented
+> service appears in the catalog with no dashboard work at all.
 
 ---
 
 ## 1. Dashboard Navigation Map
 
-The TraceNest dashboard suite is organized hierarchically from high-level operational triage down to granular code and query execution:
-
 ```text
-                     ┌─────────────────────────────────────────┐
-                     │          Needs Attention                │
-                     │  (Triage: Error Spikes & Slow Routes)   │
-                     └────────────────────┬────────────────────┘
-                                          │
-                                          ▼
-                     ┌─────────────────────────────────────────┐
-                     │           Service Catalog               │
-                     │  (Global Health & Baseline Anomalies)   │
-                     └────────────────────┬────────────────────┘
-                                          │
-         ┌────────────────────────────────┼────────────────────────────────┐
-         ▼                                ▼                                ▼
-┌─────────────────────────┐   ┌─────────────────────────┐   ┌─────────────────────────┐
-│     Django Overview     │   │   PostgreSQL Overview   │   │     Redis Overview      │
-│  (RPS, P95, 5xx Rates)  │   │  (QPS, Pool, Topology)  │   │ (Ops/sec, Hit Rate, Cmd)│
-└───────────┬─────────────┘   └───────────┬─────────────┘   └───────────┬─────────────┘
-            │                             │                             │
-            ▼                             ▼                             ▼
-┌─────────────────────────┐   ┌─────────────────────────┐   ┌─────────────────────────┐
-│ Django Endpoint Details │   │ Postgres Query Details  │   │  Redis Command Details  │
-│(Views, Middleware, Tmpl)│   │ (Sanitized SQL, Replica)│   │ (Pipelines, Arguments)  │
-└───────────┬─────────────┘   └───────────┬─────────────┘   └───────────┬─────────────┘
-            │                             │                             │
-            └─────────────────────────────┼─────────────────────────────┘
-                                          │
-                                          ▼
-                     ┌─────────────────────────────────────────┐
-                     │              Grafana Tempo              │
-                     │  (Trace Waterfall & Flamegraph Engine)  │
-                     └─────────────────────────────────────────┘
+                      ┌─────────────────────────────────────────┐
+                      │          Needs Attention                │
+                      │   tracenest-needs-attention             │
+                      │  (Triage: severity counters + issues)   │
+                      └────────────────────┬────────────────────┘
+                                           │
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │           Service Catalog               │
+                      │        tracenest-project-catalog        │
+                      │  (auto-detected services, health,      │
+                      │   throughput, % time by downstream)     │
+                      └────────────────────┬────────────────────┘
+                                           │  one row per service,
+                                           │  link carries ?var-service=…
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │       Generic Service Overview          │
+                      │          generic-service-overview       │
+                      │  ($service drives the whole dashboard:  │
+                      │   RPS, error %, P50/P95/P99,           │
+                      │   operations table)                     │
+                      └────────────────────┬────────────────────┘
+                                           │  one row per operation,
+                                           │  link carries ?var-operation=…
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │      Generic Operation Details          │
+                      │         generic-operation-details       │
+                      │  (hits/errors by status, latency,       │
+                      │   TraceQL trace list)                   │
+                      └────────────────────┬────────────────────┘
+                                           │
+                                           ▼
+                      ┌─────────────────────────────────────────┐
+                      │              Grafana Tempo              │
+                      │  (Trace Waterfall & Flamegraph Engine)  │
+                      └─────────────────────────────────────────┘
 ```
 
 ---
@@ -47,83 +64,119 @@ The TraceNest dashboard suite is organized hierarchically from high-level operat
 ## 2. Dashboard Catalog & Details
 
 ### 1. Needs Attention — Operational Issues Overview
-* **UID**: `tracenest-needs-attention`
-* **Purpose**: Primary incident triage board. Surfaces any service or endpoint that is currently failing SLOs or experiencing performance regressions.
+
+* **UID**: `tracenest-needs-attention` (v1003) · 5 panels (3 stat, 2 dynamic-text)
+* **Source**: [`tracenest_needs_attention.json`](../docker/grafana/dashboards/tracenest_needs_attention.json)
+* **Purpose**: Primary incident triage board. Surfaces any service or operation currently failing thresholds.
 * **Key Panels**:
-  * **Severity Filter**: Filter by `Critical` (Error rate > 5%, P95 > 1s, RPS Anomaly > 200%), `Warning` (Error rate > 1%, P95 > 250ms, RPS Anomaly > 50%), or `Info`.
-  * **Active Operational Issues Table**: Lists failing endpoints, current error percentage, P95 latency, and deviation from historical baseline.
-  * **Quick-Drilldown Action Links**: Direct links to open the affected endpoint in **Django Endpoint Details** or inspect raw error traces in **Tempo**.
+  * **Critical / Warning / Info counters** — three stat panels, each counting
+    how many issues currently match that severity band. Each is a link that sets
+    `var-severity` and filters the issue table below.
+  * **Detected Operational Issues table** — a DynamicText panel rendering an
+    HTML table from 10 instant PromQL targets. Each issue card shows severity,
+    headline, description, affected operation, baseline, deviation, and
+    contribution.
+  * When no issues are present the panel **auto-collapses** to a thin
+    "All Systems Healthy" banner.
+
+**Issue detection rules** (evaluated as instant queries at panel refresh):
+
+| Severity | Condition |
+| :--- | :--- |
+| 🟡 High latency — PostgreSQL | P95 > 2× the 30m P50, Django P95 > 250ms, and PostgreSQL accounts for > 30% of Django duration |
+| 🟡 High latency — Redis | Same shape, Redis accounting for > 20% |
+| 🟡 High latency — Django internal | Residual (Django minus downstream) > 60%, plus the P95/P50 and 250ms conditions |
+| 🔴 Request failures | Error ratio > 2% per `(http_route, http_method)` |
+| 🔴 Database failures | Error ratio > 1% for `db_system=~"postgresql\|postgres"` |
+| 🔴 Cache failures | Error ratio > 1% for `db_system="redis"` |
+| ℹ️ Traffic surge | Current 5m rate > 200% of the 7-day median baseline, and absolute rate > 20 |
+
+> **Caveat**: the traffic-surge rule compares against a
+> `quantile_over_time(0.5, …[7d:1h])` baseline, so it needs **7 days** of
+> Prometheus history. It cannot fire on a freshly provisioned Prometheus.
+> `resource/drop_ephemeral` in the Collector also strips `service.instance.id`
+> and `process.pid`, so gunicorn worker restarts do not fork new series.
 
 ---
 
-### 2. Service Catalog & Global Health
-* **UID**: `tracenest-project-catalog`
-* **Purpose**: Single-pane-of-glass overview across all microservices and background workers.
+### 2. TraceNest APM — Service Catalog
+
+* **UID**: `tracenest-project-catalog` (v1003) · 5 panels (1 dynamic-text, 1 table, 2 timeseries)
+* **Source**: [`tracenest_service_catalog.json`](../docker/grafana/dashboards/tracenest_service_catalog.json)
+* **Purpose**: Single-pane-of-glass overview across every instrumented service.
 * **Key Panels**:
-  * **Global Service Grid**: High-level health cards displaying RPS, Error Rate %, and P95 latency per service.
-  * **Baseline vs Current Traffic Anomaly Detection**:
-    * Compares current 5-minute request rate against the **rolling 7-day median baseline**:
-      $$\text{Anomaly \%} = \frac{\text{Current RPS} - \text{7-Day Baseline}}{\text{7-Day Baseline}} \times 100$$
-    * Identifies unexpected traffic surges (potential DDoS, scraper, or retry storm) or traffic drops (upstream network failure).
-  * **Global RPS Anomaly List**: Drilldown table highlighting anomalous endpoints with links to deeper telemetry.
+  * **Active Issues & Anomaly Detection** — the same A–G detection logic as
+    Needs Attention, rendered as a card grid. Collapses when healthy.
+  * **Installed Services** — a table that **derives the service list from
+    telemetry** rather than hardcoding it. Each service is detected by its span
+    signature and given a synthetic `Dashboard` link target:
+    * `django` — spans named `django.request`
+    * `postgresql` / the `db_instance` value — `db_system="postgresql"`
+    * `pgbouncer` — `server_address="pgbouncer"` or `server_port="6432"`
+    * `redis` — `db_system="redis"`
+    * `requests` — `HTTP.*` / `🌐.*` spans, or verb-shaped spans with no `db_system`
+  * Columns: Throughput (ops/s), Error Rate %, P95 Latency, Total Calls, and a
+    synthesized **Status** (Healthy / Degraded / No data).
+  * **Throughput by Service** — RPS split across Django, PostgreSQL, Redis, and
+    external HTTP.
+  * **% Time Spent by Downstream Service** — a 0–100% stacked breakdown of where
+    request time goes: PostgreSQL, Redis, external HTTP, and Django internal
+    logic. A floor of 1.5% of Django total is applied to the residual to avoid
+    division blowups.
+
+Adding a new instrumented service requires no dashboard change — it appears here
+automatically.
 
 ---
 
-### 3. Django Overview
-* **UID**: `tracenest-django-overview`
-* **Purpose**: Service-level overview for Django applications.
+### 3. Generic Service Overview
+
+* **UID**: `generic-service-overview` (v1005) · 5 panels (3 timeseries, 1 table, 1 row)
+* **Source**: [`tracenest_generic_service_overview.json`](../docker/grafana/dashboards/tracenest_generic_service_overview.json)
+* **Purpose**: Per-service health for **any** service. This single dashboard
+  replaced the Django / PostgreSQL / Redis overview dashboards.
 * **Key Panels**:
-  * **Throughput (RPS)**: Inbound request rate grouped by HTTP status code (`2xx`, `3xx`, `4xx`, `5xx`).
-  * **Latency Percentiles**: P50, P90, P95, and P99 response time trends over time.
-  * **Error Rate %**: Ratio of failed requests with error budget indicators.
-  * **Slowest Endpoints Table**: Ranked table of normalized routes (`/api/products/{id}/`) by P95 duration.
+  * **Requests Throughput** — `sum(rate(apm_calls_total{…}))` filtered by
+    `normalized_service`.
+  * **Error Rate Over Time** — percentage of calls with `error="true"`.
+  * **Latency Percentiles** — P50 / P95 / P99 via `histogram_quantile()` over
+    `apm_duration_milliseconds_bucket`, with exemplars attached.
+  * **Operations Summary** — one row per `normalized_operation` with RPS, error
+    %, and P50/P95/P99. Each row links to Generic Operation Details. Rows with
+    RPS = 0 are filtered out.
+
+`$service` is populated from `label_values(apm_calls_total{…}, normalized_service)`
+and defaults to `django`. A `normalized_service!="github.com"` filter excludes
+one off-nominal value that would otherwise appear as a service.
 
 ---
 
-### 4. Django Endpoint Details
-* **UID**: `tracenest-django-endpoint`
-* **Purpose**: Deep-dive into a single endpoint route.
+### 4. Generic Operation Details
+
+* **UID**: `generic-operation-details` (v1011) · 6 panels (3 timeseries, 1 table, 2 rows)
+* **Source**: [`tracenest_generic_operation_details.json`](../docker/grafana/dashboards/tracenest_generic_operation_details.json)
+* **Purpose**: Deep-dive on a single operation within a single service. This
+  replaced the Django Endpoint / PostgreSQL Query / Redis Command dashboards.
 * **Key Panels**:
-  * **Endpoint RED Metrics**: Route-specific RPS, error rate, and duration percentiles.
-  * **Middleware Execution Breakdown**: Wall-clock time spent in `SecurityMiddleware`, `AuthenticationMiddleware`, `SessionMiddleware`, etc.
-  * **View Execution Time**: Exact duration of the view function or DRF ViewSet action.
-  * **Template Rendering Breakdown**: Time spent evaluating templates and nested `{% include %}` tags.
-  * **Recent Traces (Tempo)**: Direct list of recent traces for this route with instant waterfall access.
+  * **Requests and Errors** — hits vs errors over time.
+  * **Errors by Status Code** — error volume split by `http_status_code`.
+  * **Latency** — P50 / P90 / P95 / P99, reported in **seconds**.
+  * **Recent Traces & Flamegraph Waterfall** — a Tempo table panel running the
+    only TraceQL query in the stack:
 
----
+    ```traceql
+    { span.normalized.service =~ `${service:regex}` && span.normalized.operation =~ `${operation:regex}` }
+    ```
 
-### 5. PostgreSQL Overview
-* **UID**: `tracenest-postgres-overview`
-* **Purpose**: Topology-aware database monitoring.
-* **Key Panels**:
-  * **Total Query Throughput (QPS)**: Overall query rate across all database connections.
-  * **Primary vs Read-Replica Traffic Split**: Ratio of queries executed on Primary (`master`) vs Read-Replicas (`replica1`, `replica2`).
-  * **PgBouncer Pool Contention**:
-    * Active client connections vs waiting client queries in pool queues.
-    * Allows engineers to immediately distinguish between **pool queueing delay** and **database engine execution time**.
-  * **Top 10 Slowest SQL Queries**: Sanitized query statements ranked by total execution time.
+    The `traceID` column links to the Tempo flamegraph for that trace.
 
----
+Because Tempo stores the *same* `normalized.service` / `normalized.operation`
+attributes the metrics use, metrics and traces share one identity vocabulary —
+that is what makes this join work.
 
-### 6. PostgreSQL Query Details
-* **UID**: `tracenest-postgres-query`
-* **Purpose**: Deep performance analysis of a specific SQL query pattern.
-* **Key Panels**:
-  * **Sanitized Query Pattern**: Full normalized query text with literals parameterized (`WHERE id = %s`).
-  * **Execution Rate & Latency Percentiles**: P50/P95 execution duration for this specific query.
-  * **Originating HTTP Endpoints**: Which web routes execute this query most frequently.
-  * **Associated Trace Exemplars**: Clickable trace links to see the exact application context where the query executed.
-
----
-
-### 7. Redis Overview & Command Details
-* **UIDs**: `tracenest-redis-overview`, `tracenest-redis-command`
-* **Purpose**: Cache performance, command timing, and pipeline diagnostics.
-* **Key Panels**:
-  * **Commands per Second**: Command volume partitioned by command name (`GET`, `SET`, `HGETALL`, `INCR`).
-  * **Cache Hit vs Miss Ratio**: Efficiency gauge for cache-backed views.
-  * **Command Duration Percentiles**: P95 latency per Redis command.
-  * **Pipeline Operations**: Batch pipeline frequency and average pipeline size.
+> **Caveat**: the Latency panel reports **seconds** (divides by 1000) while the
+> adjacent `duration` column override is set to **ms**. Units are inconsistent
+> between the two panels in this dashboard.
 
 ---
 
@@ -132,23 +185,22 @@ The TraceNest dashboard suite is organized hierarchically from high-level operat
 ### Workflow 1: Triage an Incident (Spike to Root Cause)
 
 ```text
-[1. Incident Alert / Needs Attention]
-        │  Engineer spots high error rate or latency on /api/orders/
+[1. Needs Attention]
+        │  Engineer sees a Critical counter, e.g. error rate > 2% on /api/orders/
         ▼
-[2. Django Endpoint Details]
-        │  Opens endpoint dashboard; observes template & DB time are normal,
-        │  but downstream HTTP call to inventory service is failing.
+[2. Generic Service Overview]
+        │  $service=django. Operations table shows /api/orders/ is the outlier.
         ▼
-[3. Click Trace Link / Exemplar]
-        │  Opens Tempo Waterfall.
+[3. Generic Operation Details]
+        │  Errors split by status code; P95 climbing. Trace list at the bottom.
         ▼
-[4. Tempo Trace Waterfall]
-        │  Locates failed span: 🌐 HTTP GET https://inventory.internal/stock (504 Gateway Timeout)
+[4. Open Trace / Exemplar]
         ▼
-[5. Root Cause Isolated]
+[5. Tempo Trace Waterfall]
+        │  Locates failed span: 🌐 HTTP GET https://inventory.internal/stock (504)
+        ▼
+[6. Root Cause Isolated]
 ```
-
----
 
 ### Workflow 2: Click-to-Trace via Prometheus Exemplars
 
@@ -156,53 +208,62 @@ When viewing any Latency or Duration panel in Grafana:
 1. Look for **blue diamonds / dots** hovering above the metric line.
 2. Hover over a dot to see the attached metadata (`trace_id`, `duration`).
 3. Click the `trace_id` link in the popup.
-4. Grafana opens a split-screen or navigates directly to the **Tempo trace waterfall**, showing the exact execution tree for that measurement.
+4. Grafana opens the **Tempo trace waterfall**, showing the exact execution tree
+   for that measurement.
 
 ```text
 Latency Graph (Prometheus)
   │
-  ├───────◆ (Exemplar: trace_id=4bf92f3577b34da6...) ──► [ Click ]
+  ├───────◆ (Exemplar: trace_id=4bf92f3577b34da6…) ──► [ Click ]
   │                                                          │
   └──────────────────────────────────────────────────────────┼───────────────► Tempo Waterfall
-                                                                               ├── django.request
-                                                                               └── 🐘 SELECT * FROM items (Slow)
+                                                                                ├── django.request
+                                                                                └── 🐘 SELECT * FROM items (Slow)
 ```
 
----
+Exemplars require the Prometheus flag `--enable-feature=exemplar-storage`
+(set in `docker-compose.yml`) and the `exemplarTraceIdDestinations` mapping in
+`provisioning/datasources/datasources.yaml`.
 
 ### Workflow 3: Diagnosing Slow Database Calls (PgBouncer vs Engine)
 
-If database latency spikes:
-1. Open **PostgreSQL Overview** (`tracenest-postgres-overview`).
-2. Check the **PgBouncer Connection Pool** panel:
-   - If `Waiting Clients > 0` and `Active Server Connections` is saturated at 100%: **The bottleneck is pool connection exhaustion**, not a slow database engine.
-   - If `Waiting Clients == 0` but `P95 Query Duration` is high: **The query itself is inefficient** (missing index or table scan).
-3. Click into **PostgreSQL Query Details** to inspect the sanitized query and find which Django views trigger it.
+Pooler wait and engine execution are **not** separate spans — one span covers the
+whole round trip. Separate them analytically:
+
+1. Open **Generic Service Overview** with `$service=postgresql` (or `pgbouncer`).
+2. Compare the two:
+   * If **PgBouncer** latency is high while the `postgresql` service shows normal
+     latency, the bottleneck is **pool contention**, not the database engine.
+   * If `postgresql` latency is high, the **query itself** is the problem
+     (missing index, table scan).
+3. Switch `$operation` in **Generic Operation Details** to the slow sanitized
+   SQL, and use the TraceQL trace list to see which Django views trigger it.
+
+Pooler-routed spans carry `db.connection.pool="pgbouncer"` and
+`peer.service="pgbouncer"`; direct spans carry `peer.service="postgres[-<alias>]"`.
+Tempo span names are prefixed `🔵` for pooled and `🐘` for direct.
 
 ---
 
 ## 4. Common Variables & Dashboard Controls
 
-Every dashboard provides a standardized top toolbar for filtering telemetry:
-
-| Variable | Description | Example Values |
-| :--- | :--- | :--- |
-| **`$project`** | Selects the target service/application | `otel-sample`, `django-lite-app` |
-| **`$cluster`** | Selects the environment/cluster | `production`, `demo-cluster` |
-| **`$endpoint`** | Filters by normalized endpoint path | `/api/products/{id}/`, `/api/checkout/` |
-| **`$http_method`** | Filters by HTTP verb | `GET`, `POST`, `PUT`, `DELETE` |
-| **`$instance`** | Filters by database/cache host instance | `pgbouncer`, `slave1db`, `redis` |
-| **`$query`** | Filters by normalized SQL query pattern | `SELECT api_product...` |
-| **`$command`** | Filters by Redis command name | `GET`, `SET`, `HGETALL` |
-| **`$severity`** | Filters issues on the triage board | `Critical`, `Warning`, `Info` |
-| **`$Filters`** | Ad-hoc filter bar for adding custom label matchers | `status_code = 500`, `error = true` |
-| **Time Range** | Time window for PromQL aggregation | `Last 15 minutes`, `Last 1 hour`, `Last 24 hours` |
-
+| Variable | Where | Description | Example Values |
+| :--- | :--- | :--- | :--- |
+| **`$project`** | all | Selects the target service/application | `otel-sample`, `django-lite-app` |
+| **`$cluster`** | all | Selects the environment/cluster | `production`, `Dummy`, `done` |
+| **`$service`** | generic ×2 | Selects a `normalized_service` | `django`, `postgresql`, `pgbouncer`, `redis`, `requests` |
+| **`$operation`** | generic ×2 | Selects a `normalized_operation` | `GET /api/products/`, `🐘 SELECT api_product` |
+| **`$severity`** | Needs Attention | Filters the issue table. Set by the severity counters; applied **client-side** in the panel's Handlebars helper, not in PromQL. | `All`, `Critical`, `Warning`, `Info` |
+| **`$Filters`** | all | Ad-hoc filter bar for custom label matchers | `error = true`, `http_status_code = 500` |
+| **Time Range** | all | Time window for PromQL aggregation | `Last 15 minutes`, `Last 1 hour` |
 ---
 
 ## 5. Summary Cheat Sheet
 
-* **Start here for incidents**: [`tracenest-needs-attention`](../docker/grafana/dashboards/tracenest_needs_attention.json)
-* **Start here for service health**: [`tracenest-service-catalog`](../docker/grafana/dashboards/tracenest_service_catalog.json)
-* **Start here for route latency**: [`tracenest-django-endpoint-details`](../docker/grafana/dashboards/tracenest_django_endpoint_details.json)
-* **Start here for database latency**: [`tracenest-postgres-overview`](../docker/grafana/dashboards/tracenest_postgres_overview.json)
+| I want to… | Open |
+| :--- | :--- |
+| Triage an incident | [`tracenest-needs-attention`](../docker/grafana/dashboards/tracenest_needs_attention.json) |
+| See overall service health | [`tracenest-project-catalog`](../docker/grafana/dashboards/tracenest_service_catalog.json) |
+| Drill into any service | [`generic-service-overview`](../docker/grafana/dashboards/tracenest_generic_service_overview.json) |
+| Drill into any operation | [`generic-operation-details`](../docker/grafana/dashboards/tracenest_generic_operation_details.json) |
+| Inspect a raw trace | Grafana **Explore** → Tempo datasource |

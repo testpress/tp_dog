@@ -175,59 +175,6 @@
         "type": "query"
       },
       {
-        "current": {
-          "selected": true,
-          "text": "5m",
-          "value": "5m"
-        },
-        "hide": 2,
-        "includeAll": false,
-        "label": "Anomaly Window",
-        "multi": false,
-        "name": "anomaly_window",
-        "options": [
-          {
-            "selected": false,
-            "text": "1m",
-            "value": "1m"
-          },
-          {
-            "selected": false,
-            "text": "3m",
-            "value": "3m"
-          },
-          {
-            "selected": true,
-            "text": "5m",
-            "value": "5m"
-          },
-          {
-            "selected": false,
-            "text": "10m",
-            "value": "10m"
-          },
-          {
-            "selected": false,
-            "text": "15m",
-            "value": "15m"
-          },
-          {
-            "selected": false,
-            "text": "30m",
-            "value": "30m"
-          },
-          {
-            "selected": false,
-            "text": "1h",
-            "value": "1h"
-          }
-        ],
-        "query": "1m,3m,5m,10m,15m,30m,1h",
-        "queryValue": "",
-        "skipUrlSync": false,
-        "type": "custom"
-      },
-      {
         "datasource": {
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
@@ -948,6 +895,17 @@
           "legendFormat": "External HTTP (Outbound Calls)",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(apm_calls_total{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval]))",
+          "legendFormat": "AWS S3 / Boto3 (Storage Operations)",
+          "range": true,
+          "refId": "E"
         }
       ],
       "title": "\u25c6 Throughput by Service (Operations / sec)",
@@ -999,7 +957,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Django (Internal)"
+              "options": "Django (Internal Application Logic)"
             },
             "properties": [
               {
@@ -1089,6 +1047,21 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "AWS S3 / Boto3 (Storage)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#06b6d4",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "External HTTP"
             },
             "properties": [
@@ -1132,7 +1105,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
+          "expr": "((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
           "legendFormat": "PostgreSQL (Database)",
           "range": true,
           "refId": "A"
@@ -1143,7 +1116,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
+          "expr": "((sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
           "legendFormat": "Redis (Cache)",
           "range": true,
           "refId": "B"
@@ -1154,8 +1127,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
-          "legendFormat": "External HTTP",
+          "expr": "((sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
+          "legendFormat": "AWS S3 / Boto3 (Storage)",
           "range": true,
           "refId": "C"
         },
@@ -1165,10 +1138,21 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
-          "legendFormat": "Django (Internal Application Logic)",
+          "expr": "((sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
+          "legendFormat": "External HTTP",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) / (((sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=~\"postgresql|postgres\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{db_system=\"redis\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{normalized_service=~\"aws-s3|aws-api\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{span_name=~\"HTTP.*|\ud83c\udf10.*\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{span_name=\"django.request\", project_name=~\"$project\", cluster_name=~\"$cluster\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
+          "legendFormat": "Django (Internal Application Logic)",
+          "range": true,
+          "refId": "E"
         }
       ],
       "title": "+ % Time Spent by Downstream Service",

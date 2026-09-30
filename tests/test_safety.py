@@ -355,6 +355,139 @@ def _raise_value_error(*args, **kwargs):
     raise ValueError("telemetry config lookup failed")
 
 
+# --------------------------------------------------------------------------
+# Regression: the SERVER wrapper's pre-application prologue must be guarded
+#
+# traced_get_response is the only wrapper that hand-rolls its span CM instead of
+# using traced_span, so it opts out of the shared degrade path. Every statement
+# between span creation and the application call runs *before* the app, so a
+# fault in any of them blocks the request. test_django.py covers the happy path
+# for the response headers; this proves they are also failure-tolerant.
+# --------------------------------------------------------------------------
+
+
+def test_server_wrapper_survives_hostile_span_context():
+    """A span whose get_span_context() blows up must not block the response."""
+    import tracenest.integrations.django.request as req_mod
+
+    tracenest.init(project_name="span-context-fault", export_batch=False)
+
+    class Resp:
+        status_code = 200
+
+        def __setitem__(self, k, v):
+            pass
+
+    class Req:
+        path = "/ok/"
+        method = "GET"
+        META: dict = {}
+        headers: dict = {}
+
+        def build_absolute_uri(self):
+            return "http://x/ok/"
+
+    original = req_mod._prime_request
+    req_mod._prime_request = lambda *a, **k: None  # no ids readable
+    try:
+        response = req_mod.traced_get_response(lambda *a, **k: Resp(), None, (Req(),), {})
+    finally:
+        req_mod._prime_request = original
+
+    assert response.status_code == 200
+
+
+def test_server_wrapper_survives_read_only_trace_id():
+    """A request refusing the trace_id write must still return a response.
+
+    The trace ids come from the span, not the request, so a request that
+    rejects the write loses its correlation attrs but keeps the traceparent
+    header and, above all, the application response.
+    """
+    import tracenest.integrations.django.request as req_mod
+
+    tracenest.init(project_name="read-only-fault", export_batch=False)
+
+    class Resp:
+        status_code = 200
+        headers: dict = {}
+
+        def __setitem__(self, k, v):
+            self.headers[k] = v
+
+    class ReadOnlyReq:
+        """Writes to trace_id fail, the way a frozen or slotted request would."""
+
+        path = "/ok/"
+        method = "GET"
+        META: dict = {}
+        headers: dict = {}
+
+        def build_absolute_uri(self):
+            return "http://x/ok/"
+
+        def __setattr__(self, name, value):
+            if name in ("trace_id", "span_id", "_tp_span"):
+                raise AttributeError(f"{name} is read-only")
+            object.__setattr__(self, name, value)
+
+    calls = []
+
+    def app(*a, **k):
+        calls.append(1)
+        return Resp()
+
+    req = ReadOnlyReq()
+    response = req_mod.traced_get_response(app, None, (req,), {})
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    # Header injection is independent of the request binding and must survive it.
+    assert "traceparent" in response.headers
+    assert response.headers["X-Trace-ID"]
+
+
+def test_server_span_records_exception_exactly_once():
+    """One failure must produce one exception event, not two.
+
+    This wrapper records the exception itself on the error path, so OTel's
+    automatic handling is disabled. Without record_exception=False the same
+    exception lands on the span twice (and set_status runs twice), which
+    double-counts errors in anything reading exception events.
+    """
+    import tracenest.integrations.django.request as req_mod
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    tracenest.init(project_name="single-exception", exporter=exporter, export_batch=False)
+
+    class Resp:
+        status_code = 200
+
+        def __setitem__(self, k, v):
+            pass
+
+    class Req:
+        path = "/boom/"
+        method = "GET"
+        META: dict = {}
+        headers: dict = {}
+
+        def build_absolute_uri(self):
+            return "http://x/boom/"
+
+    def app(*a, **k):
+        raise ValueError("handler exploded")
+
+    with pytest.raises(ValueError):
+        req_mod.traced_get_response(app, None, (Req(),), {})
+
+    exception_events = [
+        e for s in exporter.get_finished_spans() for e in s.events if e.name == "exception"
+    ]
+    assert len(exception_events) == 1
+
+
 def test_django_native_wrapper_rowcount_fault_preserves_result():
     """The ``execute_wrapper`` seam gets its cursor from ``context``, not the instance."""
     from tracenest.integrations.postgres import cursor as cur

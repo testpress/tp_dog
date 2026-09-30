@@ -77,11 +77,23 @@ class FakeViewSet(View):
         return HttpResponse(f"order {id}")
 
 
+route_observations = []
+
+
+def route_probe_view(request):
+    """Records the route published to child spans while the request is in flight."""
+    from tracenest.route_context import get_current_route
+
+    route_observations.append(get_current_route())
+    return HttpResponse("probe")
+
+
 urlpatterns = [
     path("test/sample/", sample_view, name="sample-view"),
     path("test/template/", template_view, name="template-view"),
     path("api/products/<int:id>/", product_view, name="product-detail"),
     path("test/error/", error_view, name="error-view"),
+    path("test/route-probe/", route_probe_view, name="route-probe"),
     path("test/profile/", ProfileView.as_view(), name="profile-view"),
     path("api/orders/", FakeViewSet.as_view(actions={"get": "list"}), name="orders-list"),
 ]
@@ -204,6 +216,62 @@ def test_endpoint_label_normalized():
     route = req_span.attributes.get("http.route")
     assert route == "/api/products/<int:id>/", f"route should be normalized, got {route}"
     assert req_span.attributes.get("url.path") == "/api/products/928371/"
+
+
+def test_route_resolution_uses_path_info_under_subpath_mount():
+    """A sub-path mount must still pre-resolve to the real route.
+
+    Django resolves against path_info (SCRIPT_NAME already stripped); request.path
+    keeps SCRIPT_NAME. Resolving request.path therefore fails for every request
+    under a sub-path mount, so the route published to child spans is
+    __unmatched__ and -- via RouteEnrichingSpanProcessor -- poisons every child
+    span in the request, breaking the per-endpoint spanmetrics series.
+    """
+    exporter = InMemorySpanExporter()
+    handler = _make_handler(exporter)
+    factory = RequestFactory()
+    # RequestFactory builds request.path as SCRIPT_NAME + PATH_INFO, so this
+    # yields path="/app/test/route-probe/" and path_info="/test/route-probe/".
+    req = factory.get("/test/route-probe/", SCRIPT_NAME="/app")
+    assert req.path == "/app/test/route-probe/"
+    assert req.path_info == "/test/route-probe/"
+
+    route_observations.clear()
+    resp = handler.get_response(req)
+    assert resp.status_code == 200
+
+    assert route_observations == ["/test/route-probe/"], (
+        "child spans would inherit "
+        f"{route_observations} instead of the real route"
+    )
+
+
+def test_route_resolution_honors_per_request_urlconf():
+    """A URLconf installed by middleware must be used for pre-resolution.
+
+    Without forwarding request.urlconf, pre-resolution falls back to
+    ROOT_URLCONF, so every request to a middleware-scoped URLconf reports
+    __unmatched__ until resolver_match becomes available after the handler.
+    """
+    from tracenest.integrations.django.request import _preresolve_route
+    import django.urls as django_urls
+
+    scoped_urlconf = object()  # stand-in for a middleware-installed URLconf
+
+    class ScopedResolverMatch:
+        route = "/scoped/thing/"
+
+    def _spy(path, urlconf=None, *a, **k):
+        assert path == "/scoped/thing/", f"resolved against wrong path: {path}"
+        assert urlconf is scoped_urlconf, f"urlconf not forwarded, got {urlconf!r}"
+        return ScopedResolverMatch()
+
+    original = django_urls.resolve
+    django_urls.resolve = _spy
+    try:
+        assert _preresolve_route("/scoped/thing/", scoped_urlconf) == "/scoped/thing/"
+    finally:
+        django_urls.resolve = original
 
 
 def test_regex_route_pattern_cleaning():
