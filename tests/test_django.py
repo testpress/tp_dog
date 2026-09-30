@@ -500,5 +500,24 @@ def test_unmatched_route_normalization():
     assert req_span.attributes["url.path"] == "/scanners/probe"
 
 
+def test_dynamic_tenant_urlconf_resolution():
+    """Verify multi-tenant apps with dynamic request.urlconf or candidate URLconfs resolve correctly."""
+    from tracenest.integrations.django.request import _normalize_route, _preresolve_route
+
+    class TenantReq:
+        path_info = "/api/v2/posts/"
+        path = "/api/v2/posts/"
+        urlconf = None
+        resolver_match = None
+
+    req = TenantReq()
+    assert _preresolve_route(req.path_info, request=req) == "__unmatched__"
+
+    req.urlconf = "tests.test_django"
+    route = _preresolve_route("/test/sample/", request=req)
+    assert route == "/test/sample/"
+
+
+
 
 

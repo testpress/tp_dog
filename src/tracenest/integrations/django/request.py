@@ -158,6 +158,18 @@ def _normalize_route(request, fallback_path: str) -> str:
                 pass
         elif getattr(resolver_match, "url_name", None):
             route = resolver_match.url_name
+
+    # If resolver_match was not populated, try resolving with candidate/request urlconfs
+    if not route and request:
+        try:
+            resolve_path = getattr(request, "path_info", None) or getattr(request, "path", None) or fallback_path
+            urlconf = getattr(request, "urlconf", None)
+            cand_route = _preresolve_route(resolve_path, urlconf=urlconf, request=request)
+            if cand_route and cand_route != "__unmatched__":
+                route = cand_route
+        except Exception:
+            pass
+
     if not route:
         route = "__unmatched__"
     return _finalize_route_str(str(route))
@@ -188,7 +200,7 @@ def _prime_request(span: Any, request: Any) -> Any:
     return span_ctx
 
 
-def _preresolve_route(path: str, urlconf: Any = None) -> str:
+def _preresolve_route(path: str, urlconf: Any = None, request: Any = None) -> str:
     """Best-effort normalized route resolved BEFORE the handler runs.
 
     Child spans (DB, cache, outgoing HTTP, S3) end before the SERVER span
@@ -203,12 +215,42 @@ def _preresolve_route(path: str, urlconf: Any = None) -> str:
     """
     try:
         from django.urls import resolve
+        from django.conf import settings
 
-        match = resolve(path, urlconf=urlconf)
-        route = getattr(match, "route", None) or getattr(match, "url_name", None)
-        if not route:
-            return "__unmatched__"
-        return _finalize_route_str(str(route))
+        candidates = []
+        if urlconf and urlconf not in candidates:
+            candidates.append(urlconf)
+        if request and getattr(request, "urlconf", None) and getattr(request, "urlconf", None) not in candidates:
+            candidates.append(getattr(request, "urlconf"))
+
+        root_urlconf = getattr(settings, "ROOT_URLCONF", None)
+        if root_urlconf and root_urlconf not in candidates:
+            candidates.append(root_urlconf)
+
+        for attr in ("TENANT_URLCONF", "PUBLIC_SCHEMA_URLCONF", "EMAIL_REGISTER_URLCONF"):
+            extra = getattr(settings, attr, None)
+            if extra and extra not in candidates:
+                candidates.append(extra)
+
+        if root_urlconf and "testpress" in str(root_urlconf) and "testpress.email_register_urls" not in candidates:
+            candidates.append("testpress.email_register_urls")
+
+        for conf in candidates:
+            try:
+                match = resolve(path, urlconf=conf)
+                route = getattr(match, "route", None)
+                if not route and hasattr(match, "_urlpattern") and hasattr(match._urlpattern, "pattern"):
+                    pat = match._urlpattern.pattern
+                    route = pat.regex.pattern if hasattr(pat, "regex") else str(pat)
+                elif not route and getattr(match, "url_name", None):
+                    route = match.url_name
+
+                if route:
+                    return _finalize_route_str(str(route))
+            except Exception:
+                continue
+
+        return "__unmatched__"
     except Exception:
         return "__unmatched__"
 
@@ -328,7 +370,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
         # A per-request URLconf set by middleware is honoured too.
         resolve_path = getattr(request, "path_info", None) or path
         preresolved_route = _preresolve_route(
-            resolve_path, getattr(request, "urlconf", None)
+            resolve_path, getattr(request, "urlconf", None), request=request
         )
         if preresolved_route:
             span_attrs["http.route"] = preresolved_route

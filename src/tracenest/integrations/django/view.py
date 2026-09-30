@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Optional
 from opentelemetry.trace import SpanKind, get_current_span
 
 from tracenest.config import SDKConfig
+from tracenest.route_context import set_request_route
 from tracenest.safety import UNTRACED, attempt, safe_enrich, safe_set_attribute, safe_update_name
 from tracenest.tracing import traced_span
 import tracenest
@@ -71,6 +72,13 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
         tracer_name="tracenest.django",
     ) as span:
         _apply_tags(span)
+        pre_route = attempt(
+            _normalize_route, request, initial_route, default=initial_route, _label="normalize_route"
+        )
+        if pre_route and pre_route != "__unmatched__":
+            method = attempt(getattr, request, "method", default="GET", _label="request.method")
+            set_request_route(pre_route, method)
+
         response = wrapped(*args, **kwargs)
         # Post-application enrichment must never alter the result. Each step
         # degrades independently so a failure here cannot affect what the
@@ -80,6 +88,8 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
         norm_route = attempt(
             _normalize_route, request, initial_route, default=initial_route, _label="normalize_route"
         )
+        if norm_route and norm_route != "__unmatched__":
+            set_request_route(norm_route, method)
 
         safe_update_name(span, f"🐍 django.view.{raw_view_name}")
         safe_set_attribute(span, "django.view", raw_view_name)
@@ -223,6 +233,16 @@ def traced_view_dispatch(wrapped: Callable, instance: Any, args: Any, kwargs: An
             _apply_tags(dispatch_span)
             if plan.action:
                 safe_set_attribute(dispatch_span, "django.view.action", str(plan.action))
+
+            request = args[0] if args else kwargs.get("request")
+            if request:
+                norm_route = attempt(
+                    _normalize_route, request, getattr(request, "path", "/"), default="__unmatched__", _label="normalize_route"
+                )
+                if norm_route and norm_route != "__unmatched__":
+                    req_method = attempt(getattr, request, "method", default="GET", _label="request.method")
+                    set_request_route(norm_route, req_method)
+                    safe_set_attribute(dispatch_span, "http.route", norm_route)
 
             handler = plan.handler
             if handler is None:
