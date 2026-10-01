@@ -66,21 +66,6 @@ class BaseIntegration(abc.ABC):
             attribute_name: Name of the method/attribute to wrap
             wrapper: The wrapper function with signature (wrapped, instance, args, kwargs)
         """
-        def safe_wrapper(wrapped_fn: Any, instance: Any, args: Any, kwargs: Any) -> Any:
-            try:
-                return wrapper(wrapped_fn, instance, args, kwargs)
-            except Exception as exc:
-                # Log and re-raise. The host application's exception is not ours to
-                # swallow, and retrying here would execute the wrapped call twice.
-                logger.debug(
-                    "TraceNest internal wrapper error on %s.%s: %s",
-                    target,
-                    attribute_name,
-                    exc,
-                    exc_info=True,
-                )
-                raise
-
         try:
             if isinstance(target, str):
                 module_name, _, class_or_fn = target.rpartition(".")
@@ -90,7 +75,7 @@ class BaseIntegration(abc.ABC):
                 target_obj = target
 
             original = getattr(target_obj, attribute_name, None)
-            wrapt.wrap_function_wrapper(target_obj, attribute_name, safe_wrapper)
+            wrapt.wrap_function_wrapper(target_obj, attribute_name, wrapper)
             self._wrapped_targets.append((target_obj, attribute_name, original))
         except Exception as exc:
             logger.debug(

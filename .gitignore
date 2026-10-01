@@ -7,3 +7,7 @@ __pycache__/
 .opencode/
 scratch/
 *.zip
+
+# Real env files contain credentials; only the *.example templates are tracked.
+.env
+.env.local

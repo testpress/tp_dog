@@ -233,6 +233,11 @@ services:
     environment:
       - GOMEMLIMIT=300MiB
       - GOGC=80
+      # Where to push traces. Default is the co-located Tempo (local dev).
+      # In production override this in a .env file next to docker-compose.yml,
+      # e.g. TEMPO_OTLP_ENDPOINT=tempo.obs.internal:4317
+      - TEMPO_OTLP_ENDPOINT=${TEMPO_OTLP_ENDPOINT:-tempo:4317}
+      - TEMPO_OTLP_INSECURE=${TEMPO_OTLP_INSECURE:-true}
     deploy:
       resources:
         limits:
@@ -276,6 +281,9 @@ services:
       - "--enable-feature=exemplar-storage"
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Single file, not the directory: the *.json glob must not also pick up
+      # otel-collector.prod.json, which would register a duplicate scrape target.
+      - ./docker/prometheus/targets/otel-collector.json:/etc/prometheus/targets/otel-collector.json:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090" # Prometheus Web UI & Query API

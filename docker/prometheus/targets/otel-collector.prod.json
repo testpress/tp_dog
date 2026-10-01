@@ -1,0 +1,8 @@
+[
+  {
+    "targets": ["app-server.internal:8889"],
+    "labels": {
+      "source": "apm-spans"
+    }
+  }
+]

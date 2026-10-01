@@ -631,3 +631,40 @@ def test_normalize_sql_for_metric_bounds_length():
     assert result.endswith("...")
 
 
+def test_attempt_getattr_missing_attribute_does_not_log_error(caplog):
+    import logging
+
+    class Dummy:
+        pass
+
+    with caplog.at_level(logging.DEBUG, logger="tracenest.safety"):
+        val = attempt(getattr, Dummy(), "nonexistent", default=None, _label="dummy.nonexistent")
+    
+    assert val is None
+    assert "TraceNest: telemetry step dummy.nonexistent failed" not in caplog.text
+
+
+def test_wrap_application_exception_does_not_log_internal_wrapper_error(caplog):
+    import logging
+
+    integ = _FakeIntegration()
+
+    class DummyService:
+        def raise_app_error(self):
+            raise KeyError("missing item")
+
+    def dummy_wrapper(wrapped, instance, args, kwargs):
+        return wrapped(*args, **kwargs)
+
+    obj = DummyService()
+    integ.wrap(obj, "raise_app_error", dummy_wrapper)
+
+    with caplog.at_level(logging.DEBUG, logger="tracenest.integrations"):
+        with pytest.raises(KeyError, match="missing item"):
+            obj.raise_app_error()
+
+    assert "TraceNest internal wrapper error" not in caplog.text
+    integ.unwrap_all()
+
+
+

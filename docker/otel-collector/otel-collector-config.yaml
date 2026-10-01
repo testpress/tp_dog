@@ -93,13 +93,23 @@ connectors:
     dimensions_cache_size: 5000
 exporters:
   otlp/tempo:
-    endpoint: tempo:4317
+    # TEMPO_OTLP_ENDPOINT must be set in every deployment; the collector has no
+    # built-in default for ${env:...} expansion. Local dev sets it to `tempo:4317`,
+    # production sets it to the observability host (e.g. tempo.obs.internal:4317).
+    endpoint: ${env:TEMPO_OTLP_ENDPOINT}
     tls:
-      insecure: true
+      insecure: ${env:TEMPO_OTLP_INSECURE}
+    # Wide-area link: allow the export to outlive a slow/unreachable Tempo.
+    timeout: 10s
     sending_queue:
       enabled: true
       num_consumers: 8
-      queue_size: 1000
+      queue_size: 5000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
   prometheus:
     endpoint: 0.0.0.0:8889
     namespace: apm

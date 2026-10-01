@@ -76,6 +76,8 @@ def attempt(
             "telemetry unavailable, run the application untraced".
         _label: Optional name for the debug log; defaults to ``fn.__name__``.
     """
+    if fn is getattr and len(args) == 2 and default is not UNTRACED:
+        args = (args[0], args[1], default)
     try:
         return fn(*args, **kwargs)
     except Exception as exc:
