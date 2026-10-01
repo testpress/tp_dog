@@ -1,0 +1,9 @@
+[
+  {
+    "targets": ["<APP_SERVER_IP_OR_HOSTNAME>:8889"],
+    "labels": {
+      "source": "apm-spans",
+      "env": "production"
+    }
+  }
+]

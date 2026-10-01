@@ -158,3 +158,37 @@ def reentrant_guard(instance: Any, attr: str) -> Iterator[bool]:
             _active_reentrant_guards.reset(token)
         except Exception:
             pass
+
+
+@contextlib.contextmanager
+def suppress_instrumentation() -> Iterator[None]:
+    """Context manager to suppress downstream OpenTelemetry driver instrumentations.
+
+    Used inside high-level wrappers (like django_redis cache and Django DB execute wrappers)
+    to prevent lower-level raw driver instrumentors (redis-py, psycopg2) from emitting
+    redundant nested duplicate child spans.
+    """
+    keys = [
+        "suppress_instrumentation",
+        "suppress_instrumentation-b7e0b9cc-f3b6-4ca5-8d52-37b2d54b7203",
+        "tracenest_suppress_db",
+    ]
+    try:
+        from opentelemetry.instrumentation.utils import (
+            _SUPPRESS_INSTRUMENTATION_KEY,
+            _SUPPRESS_INSTRUMENTATION_KEY_PLAIN,
+        )
+        keys.extend([_SUPPRESS_INSTRUMENTATION_KEY, _SUPPRESS_INSTRUMENTATION_KEY_PLAIN])
+    except Exception:
+        pass
+
+    from opentelemetry import context as otel_context
+
+    ctx = otel_context.get_current()
+    for k in set(keys):
+        ctx = otel_context.set_value(k, True, context=ctx)
+    token = otel_context.attach(ctx)
+    try:
+        yield
+    finally:
+        otel_context.detach(token)

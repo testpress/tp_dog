@@ -58,8 +58,8 @@ def test_django_redis_cache_tracing(memory_exporter):
     assert len(spans) == 1
     span = spans[0]
 
-    # Datadog Parity check: span name must be django_redis.cache.get
-    assert span.name == "🔴 django_redis.cache.get"
+    # Span name must have redis prefix
+    assert span.name == "🔸 django_redis.cache.get"
     assert span.attributes["django.cache.operation"] == "get"
     assert span.attributes["django.cache.key"] == "tenant:subdomain.com"
     assert span.attributes["django.cache.backend"] == "FakeRedisCache"
@@ -113,7 +113,7 @@ def test_non_redis_cache_not_misclassified(memory_exporter):
 
     spans = memory_exporter.get_finished_spans()
     assert len(spans) == 1
-    assert spans[0].name == "🔴 django.cache.get"
+    assert spans[0].name == "django.cache.get"
     assert spans[0].attributes["django.cache.backend"] == "HelperCache"
 
 
@@ -150,3 +150,37 @@ def test_redis_integration_apply_patch_and_uninstrument(monkeypatch):
         assert integ.uninstrument() is True
         assert integ._instrumented is False
         mock_inst.uninstrument.assert_called_once()
+
+
+def test_redis_request_hook_prefixes_command_span():
+    """Verify _tracenest_redis_request_hook updates command span with redis: prefix."""
+    from tracenest.integrations.redis.integration import _tracenest_redis_request_hook
+
+    mock_span = MagicMock()
+    mock_span.name = "GET"
+    mock_span.is_recording.return_value = True
+
+    _tracenest_redis_request_hook(mock_span, None, ("GET", "key"), {})
+    mock_span.update_name.assert_called_once_with("🔸 GET")
+
+
+def test_cache_suppresses_downstream_driver_instrumentation():
+    """Verify that during cache operation execution, downstream OTel instrumentors are suppressed."""
+    from opentelemetry.instrumentation.utils import is_instrumentation_enabled
+    from tracenest.integrations.django.cache import make_traced_cache_op
+
+    instrumentation_state_during_call = []
+
+    class FakeRedisCache:
+        __module__ = "django_redis.cache"
+
+        def get(self, key):
+            instrumentation_state_during_call.append(is_instrumentation_enabled())
+            return "val"
+
+    traced_get = make_traced_cache_op("get")
+    traced_get(lambda k: FakeRedisCache().get(k), FakeRedisCache(), ("k",), {})
+
+    assert len(instrumentation_state_during_call) == 1
+    assert instrumentation_state_during_call[0] is False  # Suppressed!
+

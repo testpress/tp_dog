@@ -27,7 +27,7 @@ This document tracks the status of all application-level, service-level, and req
 - [x] **Endpoint-level request volume, throughput, latency, and error analysis**
   - *Details*: Low-cardinality URL route normalization (`_normalize_route`) in Django integration (`src/tracenest/integrations/django/request.py`), aggregated per endpoint path in Prometheus and displayed in the generic service/operation dashboards (`$service=django`, `$operation=GET /api/products/…`).
 - [x] **Visibility into key services**:
-  - [x] **Django application server**: Request handlers (`django.request`), middleware (`⚙️ django.middleware.*`), views (`🐍 django.view.*`), templates (`🎨 django.template:*`), cache operations (`django.cache.*`), and auth events (`🔐 django.auth.*`).
+  - [x] **Django application server**: Request handlers (`django.request`), middleware (`django.middleware.*`), views (`🐍 django.view.*`), templates (`🎨 django.template:*`), cache operations (`django.cache.*`), and auth events (`🔐 django.auth.*`).
   - [x] **PostgreSQL primary database**: Driver cursor wrapping, sanitized SQL queries, `db.role="primary"`, PgBouncer connection pool topology detection (`🔵`).
   - [x] **PostgreSQL replica databases**: Replica server topology detection (`postgres-replica1`, `postgres-replica2`, `slave1`, `slave2`) with `db.role="replica"` tagging (`🐘`).
   - [x] **Redis**: Command formatting (`GET`, `SET`, `INCR`), pipeline execution tracing, sensitive argument redacting (`AUTH`, `CONFIG`), and IP address masking (`🔴`).
@@ -77,7 +77,7 @@ This document tracks the status of all application-level, service-level, and req
 - [x] **Complete trace and span waterfall for selected request instance**
   - *Details*: Tempo trace waterfall in Grafana rendering parent-child relationships and operation durations.
 - [x] **Detailed breakdown of operations in waterfall**:
-  - [x] **Django middleware**: `⚙️ django.middleware.<name>` spans showing exact middleware duration.
+  - [x] **Django middleware**: `django.middleware.<name>` spans showing exact middleware duration.
   - [x] **View & application functions**: `🐍 django.view.<ViewClass>.<method>` spans.
   - [x] **Template rendering**: `🎨 django.template: <name>` spans.
   - [x] **PostgreSQL queries**: `🐘 SELECT/INSERT` or `🔵` PgBouncer spans with sanitized SQL.

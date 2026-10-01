@@ -7,7 +7,7 @@ from opentelemetry.trace import SpanKind
 
 from tracenest.config import SDKConfig
 from tracenest.safety import attempt, safe_set_attribute
-from tracenest.tracing import traced_span
+from tracenest.tracing import suppress_instrumentation, traced_span
 import tracenest
 
 logger = logging.getLogger("tracenest.integrations.django.cache")
@@ -67,9 +67,9 @@ def make_traced_cache_op(op_name: str):
         backend_cls = attempt(getattr, instance.__class__, "__name__", default="cache", _label="cache_backend_cls")
 
         if _is_redis_backend(instance):
-            span_name = f"🔴 django_redis.cache.{op_name}"
+            span_name = f"🔸 django_redis.cache.{op_name}"
         else:
-            span_name = f"🔴 django.cache.{op_name}"
+            span_name = f"django.cache.{op_name}"
 
         key = None
         if args:
@@ -99,7 +99,8 @@ def make_traced_cache_op(op_name: str):
         token = _in_cache_span.set(True)
         try:
             with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django") as span:
-                res = wrapped(*args, **kwargs)
+                with suppress_instrumentation():
+                    res = wrapped(*args, **kwargs)
                 if op_name == "get":
                     safe_set_attribute(span, "django.cache.hit", res is not None)
                 elif op_name == "get_many":

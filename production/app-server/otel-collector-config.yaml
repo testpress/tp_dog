@@ -1,0 +1,152 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 500ms
+    limit_mib: 280
+    spike_limit_mib: 50
+  resource/drop_ephemeral:
+    attributes:
+      - key: service.instance.id
+        action: delete
+      - key: process.pid
+        action: delete
+  batch:
+    timeout: 500ms
+    send_batch_size: 256
+    send_batch_max_size: 512
+  filter/noise:
+    error_mode: ignore
+    traces:
+      span:
+        - name == "GET /healthz"
+        - name == "GET /readyz"
+        - name == "/healthz"
+        - name == "/readyz"
+        - attributes["http.route"] == "/healthz"
+        - attributes["http.route"] == "/readyz"
+  transform/normalize:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["peer.service"], "pgbouncer") where attributes["server.address"] == "pgbouncer" or attributes["server.port"] == 6432 or attributes["server.port"] == "6432"
+          - set(attributes["peer.service"], "redis") where attributes["db.system"] == "redis"
+          - set(attributes["peer.service"], "postgres") where (attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres") and attributes["peer.service"] == nil
+          - set(attributes["db.name"], attributes["peer.service"]) where attributes["peer.service"] != nil and (attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres")
+          - set(attributes["db.name"], "redis") where attributes["db.system"] == "redis"
+          - set(attributes["normalized.service"], "aws-s3") where attributes["rpc.system"] == "aws-api"
+          - set(attributes["normalized.service"], attributes["peer.service"]) where attributes["normalized.service"] == nil and attributes["peer.service"] != nil
+          - set(attributes["normalized.service"], attributes["messaging.system"]) where attributes["normalized.service"] == nil and attributes["messaging.system"] != nil
+          - set(attributes["normalized.service"], attributes["rpc.system"]) where attributes["normalized.service"] == nil and attributes["rpc.system"] != nil
+          - set(attributes["normalized.service"], attributes["db.system"]) where attributes["normalized.service"] == nil and attributes["db.system"] != nil
+          - set(attributes["normalized.service"], attributes["component"]) where attributes["normalized.service"] == nil and attributes["component"] != nil and attributes["component"] != "django"
+          - set(attributes["normalized.service"], "django") where attributes["normalized.service"] == nil
+          - set(attributes["normalized.service"], "postgres") where attributes["normalized.service"] == "postgresql"
+          - set(attributes["normalized.service"], "aws-s3") where attributes["normalized.service"] == "aws-api"
+          - set(attributes["normalized.operation"], Concat([attributes["rpc.service"], attributes["rpc.method"]], ".")) where attributes["rpc.service"] != nil and attributes["rpc.method"] != nil
+          - set(attributes["normalized.operation"], attributes["rpc.method"]) where attributes["normalized.operation"] == nil and attributes["rpc.method"] != nil
+          - set(attributes["normalized.operation"], attributes["db.statement"]) where attributes["normalized.operation"] == nil and attributes["db.statement"] != nil
+          - set(attributes["normalized.operation"], Concat([attributes["http.method"], attributes["http.route"]], " ")) where attributes["normalized.operation"] == nil and attributes["http.route"] != nil and attributes["span.type"] == "web"
+          - set(attributes["normalized.operation"], Concat([attributes["http.method"], attributes["http.route"]], " ")) where attributes["normalized.operation"] == nil and attributes["http.route"] != nil and attributes["component"] == "django"
+          - set(attributes["normalized.operation"], name) where attributes["normalized.operation"] == nil
+
+connectors:
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets:
+          - 2ms
+          - 5ms
+          - 10ms
+          - 25ms
+          - 50ms
+          - 100ms
+          - 250ms
+          - 500ms
+          - 1s
+          - 2.5s
+          - 5s
+    dimensions:
+      - name: http.method
+      - name: http.status_code
+      - name: http.route
+      - name: db.system
+      - name: db.operation
+      - name: db.statement
+      - name: db.instance
+      - name: server.address
+      - name: server.port
+      - name: error
+      - name: span.type
+      - name: normalized.service
+      - name: normalized.operation
+    dimensions_cache_size: 5000
+  servicegraph:
+    latency_histogram_buckets: [2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s]
+    dimensions:
+      - project.name
+    store:
+      ttl: 2s
+      max_items: 2000
+
+exporters:
+  otlp/tempo:
+    # Set via TEMPO_OTLP_ENDPOINT in .env (e.g. tempo.obs.internal:4317 or <OBS_SERVER_IP>:4317)
+    endpoint: ${env:TEMPO_OTLP_ENDPOINT}
+    tls:
+      insecure: ${env:TEMPO_OTLP_INSECURE}
+    timeout: 10s
+    sending_queue:
+      enabled: true
+      num_consumers: 8
+      queue_size: 5000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: apm
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - filter/noise
+        - resource/drop_ephemeral
+        - transform/normalize
+        - batch
+      exporters:
+        - otlp/tempo
+        - spanmetrics
+        - servicegraph
+    metrics:
+      receivers:
+        - otlp
+        - spanmetrics
+        - servicegraph
+      processors:
+        - memory_limiter
+        - resource/drop_ephemeral
+        - batch
+      exporters:
+        - prometheus
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888

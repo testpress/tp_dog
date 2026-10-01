@@ -24,13 +24,13 @@ def traced_login(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> An
         span_attrs["usr.id"] = user_id
         span_attrs["enduser.id"] = user_id
 
-    with traced_span("🔐 django.auth.login", kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django"):
+    with traced_span("django.auth.login", kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django"):
         return wrapped(*args, **kwargs)
 
 
 def traced_authenticate(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
     with traced_span(
-        "🔐 django.auth.authenticate",
+        "django.auth.authenticate",
         kind=SpanKind.INTERNAL,
         attributes={"django.auth.action": "authenticate"},
         tracer_name="tracenest.django",

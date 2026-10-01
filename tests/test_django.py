@@ -110,7 +110,7 @@ def test_request_span_created():
     assert "X-Span-ID" in response
 
     spans = exporter.get_finished_spans()
-    request_spans = [s for s in spans if s.name == "django.request"]
+    request_spans = [s for s in spans if s.kind == SpanKind.SERVER]
     assert len(request_spans) == 1
 
     req_span = request_spans[0]
@@ -185,7 +185,7 @@ def test_error_500_marks_span():
     assert response.status_code == 500
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.attributes["http.response.status_code"] == 500
     assert req_span.attributes["error"] is True
     assert req_span.status.status_code == StatusCode.ERROR
@@ -210,7 +210,7 @@ def test_w3c_traceparent_propagation():
     assert response.status_code == 200
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
 
     assert format(req_span.context.trace_id, "032x") == trace_id
     assert format(req_span.parent.span_id, "016x") == parent_span_id
@@ -232,7 +232,7 @@ def test_throttled_429_marks_span():
     assert response.status_code == 429
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.attributes["http.response.status_code"] == 429
     assert req_span.attributes["error"] is False
     assert req_span.status.status_code == StatusCode.OK
@@ -258,7 +258,7 @@ def test_static_tags_applied_to_request_span():
     assert response.status_code == 200
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.attributes["org"] == "testpress"
     assert req_span.attributes["institute"] == "karunya"
     assert req_span.attributes["subdomain"] == "lms"
@@ -320,7 +320,7 @@ def test_on_request_span_callback():
     assert len(callback_invoked) == 1
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.attributes["org"] == "testpress"
     assert req_span.attributes["custom.callback"] is True
     assert req_span.attributes["custom.request_path"] == "/test/sample/"
@@ -349,7 +349,7 @@ def test_on_request_span_callback_exception_silenced():
     assert response.status_code == 200
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.attributes["http.response.status_code"] == 200
 
 
@@ -394,7 +394,7 @@ def test_user_pii_redacted_for_authenticated_request():
     assert response.status_code == 200
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
 
     # Pseudonymous IDs are permitted
     assert req_span.attributes.get("usr.id") == "42"
@@ -427,7 +427,7 @@ def test_sensitive_query_parameters_sanitized_in_django_request():
     assert response.status_code == 200
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
 
     assert "url.query" in req_span.attributes
     query = req_span.attributes["url.query"]
@@ -495,7 +495,7 @@ def test_unmatched_route_normalization():
     assert response.status_code == 404
 
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.attributes["http.route"] == "__unmatched__"
     assert req_span.attributes["url.path"] == "/scanners/probe"
 

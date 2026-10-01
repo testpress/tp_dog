@@ -4,6 +4,11 @@ global:
   evaluation_interval: 10s
 
 scrape_configs:
+  # Targets live in files under targets/ rather than inline, because prometheus.yml
+  # does not support environment variable expansion. Point each deployment at a
+  # different targets file instead of editing this config:
+  #   local dev  -> targets/otel-collector.json  ("otel-collector:8889")
+  #   production -> targets/otel-collector.prod.json  ("<app-host>:8889")
   - job_name: "otel-collector-spanmetrics"
     scrape_interval: 10s
     scrape_timeout: 10s

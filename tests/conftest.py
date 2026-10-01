@@ -45,6 +45,20 @@ if not settings.configured:
     django.setup()
 
 
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+_orig_init = tracenest.init
+
+
+def _safe_test_init(*args, **kwargs):
+    if "exporter" not in kwargs or kwargs["exporter"] is None:
+        kwargs["exporter"] = InMemorySpanExporter()
+    return _orig_init(*args, **kwargs)
+
+
+tracenest.init = _safe_test_init
+
+
 @pytest.fixture(autouse=True)
 def clean_sdk_state():
     """Reset SDK and integration state before and after every test."""

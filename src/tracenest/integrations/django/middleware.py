@@ -43,7 +43,7 @@ _HOOK_METHODS = (
 
 
 def _make_hook_wrapper(mw_path: str, mw_short: str, method_name: str):
-    span_name = f"⚙️ {mw_path}.{method_name}"
+    span_name = f"{mw_path}.{method_name}"
 
     def _wrapper(wrapped_call: Callable, inst: Any, a: Any, k: Any):
         attrs = {

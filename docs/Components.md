@@ -8,8 +8,8 @@ When `tracenest.init()` runs, it auto-patches all installed components with zero
                                 DJANGO REQUEST WATERFALL
  ┌──────────────────────────────────────────────────────────────────────────┐
  │ django.request [SERVER]                                                  │
- │  ├── ⚙️ django.middleware.security.SecurityMiddleware.__call__           │
- │  ├── ⚙️ django.contrib.auth.middleware.AuthenticationMiddleware.__call__  │
+ │  ├── django.middleware.security.SecurityMiddleware.__call__           │
+ │  ├── django.contrib.auth.middleware.AuthenticationMiddleware.__call__  │
  │  └── 🐍 django.view.ProductDetailView                                   │
  │       ├── 🔵 SELECT id, name, price FROM products WHERE id = ?          │
  │       ├── 🔴 django_redis.cache.get                                     │
@@ -27,7 +27,7 @@ The Django integration provides complete lifecycle observability for inbound HTT
 | Span Name / Pattern | Kind | Description | Key Attributes |
 | :--- | :--- | :--- | :--- |
 | **`django.request`** | `SERVER` | Root span representing the entire HTTP request | `http.method`, `http.status_code`, `http.route`, `client.address` |
-| **`⚙️ <module>.<Class>.<method>`** | `INTERNAL` | Timing for middleware hooks (`__call__`, `process_request`, etc.) | `django.middleware`, `django.middleware.name`, `django.middleware.method` |
+| **`<module>.<Class>.<method>`** | `INTERNAL` | Timing for middleware hooks (`__call__`, `process_request`, etc.) | `django.middleware`, `django.middleware.name`, `django.middleware.method` |
 | **`🐍 django.view.<Name>`** | `INTERNAL` | View execution (FBVs, CBVs, DRF viewsets, `dispatch`) | `django.view`, `django.view.name`, `django.view.class`, `django.view.action` |
 | **`🎨 django.template: <name>`** | `INTERNAL` | Template rendering and nested `{% include %}` | `django.template.name` |
 | **`🔴 django_redis.cache.<op>`** | `INTERNAL` | Django cache backend calls (`get`, `set`, `delete`) | `django.cache.operation`, `django.cache.backend`, `django.cache.key`, `django.cache.hit` |

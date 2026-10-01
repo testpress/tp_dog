@@ -90,7 +90,7 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
         if norm_route and norm_route != "__unmatched__":
             set_request_route(norm_route, method)
 
-        safe_update_name(span, f"🐍 django.view.{raw_view_name}")
+        safe_update_name(span, f"django.view.{raw_view_name}")
         safe_set_attribute(span, "django.view", raw_view_name)
         safe_set_attribute(span, "django.view.name", raw_view_name)
         safe_set_attribute(span, "resource.name", raw_view_name)
@@ -101,7 +101,7 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
 
 
 def traced_view_setup(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
-    span_name = "⚙️ django.views.generic.base.View.setup"
+    span_name = "django.views.generic.base.View.setup"
     attrs = {
         "span.type": "web",
         "component": "django",
@@ -170,7 +170,7 @@ def _build_dispatch_plan(instance: Any, wrapped: Callable, args: Any, kwargs: An
     )
     action = attempt(getattr, instance, "action", default=None, _label="view.action")
 
-    dispatch_span_name = f"🐍 {dispatch_cls}.dispatch"
+    dispatch_span_name = f"{dispatch_cls}.dispatch"
     dispatch_attrs = {
         "span.type": "web",
         "component": "django",
@@ -189,7 +189,7 @@ def _build_dispatch_plan(instance: Any, wrapped: Callable, args: Any, kwargs: An
 
     snake_cls = attempt(_to_snake_case, view_cls, default=view_cls, _label="view.snake")
     handler_span_name = (
-        f"🐍 {view_module}.{snake_cls}.{handler_method}" if view_module else f"🐍 {snake_cls}.{handler_method}"
+        f"{view_module}.{snake_cls}.{handler_method}" if view_module else f"{snake_cls}.{handler_method}"
     )
     handler_attrs = {
         "span.type": "web",

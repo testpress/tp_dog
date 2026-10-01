@@ -5,18 +5,24 @@ import re
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from opentelemetry.trace import SpanKind, StatusCode, get_tracer
-from opentelemetry.context import attach, detach, set_value, get_value
+from opentelemetry.context import (
+    attach,
+    detach,
+    set_value,
+    get_value,
+    _SUPPRESS_INSTRUMENTATION_KEY,
+)
 
 from tracenest.config import SDKConfig
 from tracenest.safety import UNTRACED, attempt, safe_set_attribute
 from tracenest.sanitize import normalize_sql_for_metric, sanitize_sql
-from tracenest.tracing import reentrant_guard, traced_span
+from tracenest.tracing import reentrant_guard, suppress_instrumentation, traced_span
 import tracenest
 
 logger = logging.getLogger("tracenest.integrations.postgres")
 
 _config: Optional[SDKConfig] = None
-_SUPPRESS_KEY = "suppress_instrumentation"
+_SUPPRESS_KEY = _SUPPRESS_INSTRUMENTATION_KEY
 
 
 def set_config(config: Optional[SDKConfig]) -> None:
@@ -140,16 +146,7 @@ def is_pgbouncer_connection(db_host: Any, db_port: Any) -> bool:
     return host_str == "pgbouncer" or port_num == 6432 or "pgbouncer" in host_str
 
 
-from contextlib import contextmanager
-
-@contextmanager
-def suppress_db_instrumentation():
-    """Context manager to suppress downstream duplicate driver instrumentation."""
-    token = attach(set_value(_SUPPRESS_KEY, True))
-    try:
-        yield
-    finally:
-        detach(token)
+suppress_db_instrumentation = suppress_instrumentation
 
 
 def _build_db_span_context(
@@ -189,9 +186,8 @@ def _build_db_span_context(
         span_attrs["db.connection.pool"] = "pgbouncer"
     if db_user:
         span_attrs["db.user"] = str(db_user)
-
-    db_icon = "🔵" if is_pgbouncer else "🐘"
-    span_name = f"{db_icon} {metric_sql}" if metric_sql else f"{db_icon} postgres.query"
+    db_icon = "🟢"
+    span_name = f"{db_icon} {metric_sql}" if metric_sql else (f"🟢 pgbouncer.query" if is_pgbouncer else f"🟢 postgres.query")
 
     return span_name, span_attrs
 

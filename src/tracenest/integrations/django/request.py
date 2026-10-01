@@ -384,9 +384,10 @@ def traced_get_response(wrapped, instance, args, kwargs):
         # handler carry http.route even though resolver_match is only
         # populated after the handler returns.
         route_token = set_request_route(preresolved_route, method)
+        start_span_name = f"{method} {preresolved_route}" if preresolved_route else f"{method} {path}"
         try:
             with tracer.start_as_current_span(
-                "django.request",
+                start_span_name,
                 context=parent_ctx,
                 kind=SpanKind.SERVER,
                 attributes=span_attrs,
@@ -415,6 +416,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
                     route_for_metrics = attempt(
                         _normalize_route, request, path, default="__unmatched__", _label="normalize_route"
                     )
+                    attempt(span.update_name, f"{method} {route_for_metrics}", _label="update_span_name")
                     safe_set_attribute(span, "http.route", route_for_metrics)
                     safe_set_attribute(span, "http.response.status_code", 500)
                     safe_set_attribute(span, "http.status_code", 500)
@@ -431,6 +433,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
                         _normalize_route, request, path, default="__unmatched__", _label="normalize_route"
                     )
                     route_for_metrics = norm_route
+                    attempt(span.update_name, f"{method} {norm_route}", _label="update_span_name")
                     view_name = attempt(
                         _resolve_view_name, request, method, default="view", _label="view_name"
                     )

@@ -148,7 +148,7 @@ def test_middleware_spans_created():
     # Check tree structure: view span child of middleware, middleware child of request
     trace_spans = [s for s in spans if s.context.trace_id == spans[0].context.trace_id]
     assert len(trace_spans) >= 2
-    assert any(s.name == "django.request" for s in trace_spans)
+    assert any(s.kind == SpanKind.SERVER for s in trace_spans)
 
 
 def test_waterfall_parent_child():
@@ -159,7 +159,7 @@ def test_waterfall_parent_child():
     resp = handler.get_response(req)
     assert resp.status_code == 200
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     for s in spans:
         assert s.context.trace_id == req_span.context.trace_id, f"trace_id mismatch for {s.name}"
     view_spans = [s for s in spans if "django.view" in s.name]
@@ -186,7 +186,7 @@ def test_trace_ids_consistent():
     assert len(trace_ids) == 2
     for tid in trace_ids:
         trace_spans = [s for s in spans if s.context.trace_id == tid]
-        assert any(s.name == "django.request" for s in trace_spans)
+        assert any(s.kind == SpanKind.SERVER for s in trace_spans)
 
 
 def test_request_and_view_spans_generated():
@@ -197,7 +197,7 @@ def test_request_and_view_spans_generated():
     handler.get_response(req)
     spans = exporter.get_finished_spans()
     assert len(spans) > 0
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.kind == SpanKind.SERVER
     assert req_span.attributes.get("http.route") == "/test/sample/"
     assert req_span.attributes.get("http.request.method") == "GET"
@@ -212,7 +212,7 @@ def test_endpoint_label_normalized():
     resp = handler.get_response(req)
     assert resp.status_code == 200
     spans = exporter.get_finished_spans()
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     route = req_span.attributes.get("http.route")
     assert route == "/api/products/<int:id>/", f"route should be normalized, got {route}"
     assert req_span.attributes.get("url.path") == "/api/products/928371/"
@@ -298,7 +298,7 @@ def test_error_recording_and_metrics():
     has_exception = any(len(s.events) > 0 for s in error_spans)
     assert has_exception, "should have exception event"
     # Also check request span is error
-    req_span = next(s for s in spans if s.name == "django.request")
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
     assert req_span.status.status_code == StatusCode.ERROR
 
 
@@ -361,7 +361,7 @@ def test_uninstrument_restores():
     req = factory.get("/test/sample/")
     resp = h.get_response(req)
     assert resp.status_code == 200
-    assert len([s for s in exporter.get_finished_spans() if s.name == "django.request"]) == 1
+    assert len([s for s in exporter.get_finished_spans() if s.kind == SpanKind.SERVER]) == 1
     # Now uninstrument via manager
     mgr.uninstrument_all()
     exporter.clear()
@@ -373,7 +373,7 @@ def test_uninstrument_restores():
     assert resp2.status_code == 200
     spans2 = exporter.get_finished_spans()
     # After uninstrument, no django spans should be created (only 0)
-    assert len([s for s in spans2 if s.name == "django.request"]) == 0
+    assert len([s for s in spans2 if s.kind == SpanKind.SERVER]) == 0
     # Cleanup: re-instrument for remaining tests via fixture teardown will handle
     tracenest._reset_for_testing()
 
@@ -410,8 +410,8 @@ def test_nested_template_includes_enabled_by_default():
     span_names = [s.name for s in template_spans]
 
     # Both parent and included child template are captured
-    assert "🎨 django.template: parent.html" in span_names
-    assert "🎨 django.template: child.html" in span_names
+    assert "django.template: parent.html" in span_names
+    assert "django.template: child.html" in span_names
 
 
 def test_nested_template_suppression_opt_out():
@@ -446,7 +446,7 @@ def test_nested_template_suppression_opt_out():
     span_names = [s.name for s in template_spans]
 
     # Only top-level template should have a span when opted out
-    assert span_names == ["🎨 django.template: parent.html"]
+    assert span_names == ["django.template: parent.html"]
 
 
 def test_multipart_template_error_waterfall():
@@ -492,20 +492,20 @@ def test_multipart_template_error_waterfall():
 
     # Should have parent, part1, part2 (part3 is never reached)
     span_names = [s.name for s in template_spans]
-    assert "🎨 django.template: parent.html" in span_names
-    assert "🎨 django.template: part1_header.html" in span_names
-    assert "🎨 django.template: part2_broken.html" in span_names
-    assert "🎨 django.template: part3_footer.html" not in span_names
+    assert "django.template: parent.html" in span_names
+    assert "django.template: part1_header.html" in span_names
+    assert "django.template: part2_broken.html" in span_names
+    assert "django.template: part3_footer.html" not in span_names
 
     # Check statuses
-    part1_span = next(s for s in template_spans if s.name == "🎨 django.template: part1_header.html")
+    part1_span = next(s for s in template_spans if s.name == "django.template: part1_header.html")
     assert part1_span.status.status_code == StatusCode.OK
 
-    part2_span = next(s for s in template_spans if s.name == "🎨 django.template: part2_broken.html")
+    part2_span = next(s for s in template_spans if s.name == "django.template: part2_broken.html")
     assert part2_span.status.status_code == StatusCode.ERROR
     assert part2_span.attributes.get("error.type") == "RuntimeError"
 
-    parent_span = next(s for s in template_spans if s.name == "🎨 django.template: parent.html")
+    parent_span = next(s for s in template_spans if s.name == "django.template: parent.html")
     assert parent_span.status.status_code == StatusCode.ERROR
 
 
@@ -559,13 +559,13 @@ def test_template_pattern_exclusion():
     span_names = [s.name for s in template_spans]
 
     # main.html and components/navbar.html should be captured
-    assert "🎨 django.template: main.html" in span_names
-    assert "🎨 django.template: components/navbar.html" in span_names
+    assert "django.template: main.html" in span_names
+    assert "django.template: components/navbar.html" in span_names
 
     # django/forms/*, admin/widgets/*, debug_toolbar/* should be excluded
-    assert "🎨 django.template: django/forms/default.html" not in span_names
-    assert "🎨 django.template: admin/widgets/input.html" not in span_names
-    assert "🎨 django.template: debug_toolbar/toolbar.html" not in span_names
+    assert "django.template: django/forms/default.html" not in span_names
+    assert "django.template: admin/widgets/input.html" not in span_names
+    assert "django.template: debug_toolbar/toolbar.html" not in span_names
 
 
 def test_regex_route_normalization():
@@ -612,14 +612,14 @@ def test_datadog_style_middleware_waterfall():
     span_names = {s.name: s for s in spans}
 
     # Verify SecurityMiddleware.__call__ and process_request
-    sec_call = span_names.get("⚙️ django.middleware.security.SecurityMiddleware.__call__")
-    sec_req = span_names.get("⚙️ django.middleware.security.SecurityMiddleware.process_request")
+    sec_call = span_names.get("django.middleware.security.SecurityMiddleware.__call__")
+    sec_req = span_names.get("django.middleware.security.SecurityMiddleware.process_request")
     assert sec_call is not None, f"SecurityMiddleware.__call__ span must exist, got: {list(span_names.keys())}"
     assert sec_req is not None, f"SecurityMiddleware.process_request span must exist, got: {list(span_names.keys())}"
     assert sec_req.parent.span_id == sec_call.context.span_id, "process_request must be child of __call__"
 
     # Verify CommonMiddleware is downstream child of SecurityMiddleware
-    com_call = span_names.get("⚙️ django.middleware.common.CommonMiddleware.__call__")
+    com_call = span_names.get("django.middleware.common.CommonMiddleware.__call__")
     assert com_call is not None, f"CommonMiddleware.__call__ span must exist, got: {list(span_names.keys())}"
     assert com_call.parent.span_id == sec_call.context.span_id, "downstream middleware must be child of outer __call__"
 
@@ -682,11 +682,11 @@ def test_drf_viewset_action_tracing():
     spans = exporter.get_finished_spans()
     span_names = {s.name: s for s in spans}
 
-    view_span = next((s for s in spans if s.name == "🐍 django.view.FakeViewSet.list"), None)
+    view_span = next((s for s in spans if s.name == "django.view.FakeViewSet.list"), None)
     dispatch_span = next((s for s in spans if s.name.endswith(".dispatch")), None)
     list_span = next((s for s in spans if s.name.endswith(".list")), None)
 
-    assert view_span is not None, f"Expected 🐍 django.view.FakeViewSet.list, got: {list(span_names.keys())}"
+    assert view_span is not None, f"Expected django.view.FakeViewSet.list, got: {list(span_names.keys())}"
     assert dispatch_span is not None, f"Expected dispatch span, got: {list(span_names.keys())}"
     assert list_span is not None, f"Expected .list action span, got: {list(span_names.keys())}"
     assert list_span.name.endswith("fake_view_set.list")

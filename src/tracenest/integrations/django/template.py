@@ -135,7 +135,7 @@ def _plan_template_render(instance: Any):
         return None
 
     engine = getattr(instance, "engine", None)
-    span_name = f"🎨 django.template: {template_str}"
+    span_name = f"django.template: {template_str}"
     span_attrs = {
         "span.type": "template",
         "component": "django",
@@ -183,7 +183,7 @@ def traced_template_response_render(wrapped: Callable, instance: Any, args: Any,
         return wrapped(*args, **kwargs)
 
     template_str = _extract_response_template_name(instance)
-    span_name = "🎨 django.template.response.TemplateResponse.render"
+    span_name = "django.template.response.TemplateResponse.render"
     span_attrs = {
         "django.response.class": instance.__class__.__name__,
     }

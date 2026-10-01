@@ -1,0 +1,23 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: tp-otel-collector
+    restart: unless-stopped
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    environment:
+      - GOMEMLIMIT=300MiB
+      - GOGC=80
+      - TEMPO_OTLP_ENDPOINT=${TEMPO_OTLP_ENDPOINT:?set TEMPO_OTLP_ENDPOINT in .env}
+      - TEMPO_OTLP_INSECURE=${TEMPO_OTLP_INSECURE:-true}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:4318:4318" # OTLP HTTP receiver (Django SDK pushes here locally)
+      - "127.0.0.1:4317:4317" # OTLP gRPC receiver (Local gRPC SDKs)
+      - "0.0.0.0:8889:8889"     # Prometheus metrics exporter (Scraped by remote Prometheus)
+      - "127.0.0.1:8888:8888" # Internal collector health/metrics

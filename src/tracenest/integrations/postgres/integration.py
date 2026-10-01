@@ -103,15 +103,23 @@ class PostgresIntegration(BaseIntegration):
         except Exception as exc:
             logger.debug("Django db backends utils patch skipped: %s", exc)
 
-        # 3. Instrument direct psycopg2 driver via official OTel Psycopg2Instrumentor
+        # 3. Instrument direct psycopg2 driver via official OTel Psycopg2Instrumentor (for non-Django usage)
+        has_django_db = False
         try:
-            from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
+            importlib.import_module("django.db.backends.utils")
+            has_django_db = True
+        except ImportError:
+            pass
 
-            instrumentor = Psycopg2Instrumentor()
-            if not instrumentor.is_instrumented_by_opentelemetry:
-                instrumentor.instrument()
-        except Exception as exc:
-            logger.debug("Psycopg2Instrumentor patch skipped: %s", exc)
+        if not has_django_db:
+            try:
+                from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
+
+                instrumentor = Psycopg2Instrumentor()
+                if not instrumentor.is_instrumented_by_opentelemetry:
+                    instrumentor.instrument()
+            except Exception as exc:
+                logger.debug("Psycopg2Instrumentor patch skipped: %s", exc)
 
     def uninstrument(self) -> bool:
         # Remove connection signal handler and execute_wrappers

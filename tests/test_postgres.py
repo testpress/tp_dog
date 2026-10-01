@@ -128,7 +128,7 @@ def test_select_creates_span():
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    assert span.name == "🐘 SELECT id, name FROM users WHERE active = ?"
+    assert span.name == "🟢 SELECT id, name FROM users WHERE active = ?"
     assert span.kind == SpanKind.CLIENT
     assert span.attributes["db.system"] == "postgresql"
     assert span.attributes["db.operation"] == "SELECT"
@@ -349,7 +349,7 @@ def test_executemany_creates_span():
     assert len(spans) == 1
     span = spans[0]
 
-    assert span.name == "🐘 INSERT INTO items (name, price) VALUES (%s, %s)"
+    assert span.name == "🟢 INSERT INTO items (name, price) VALUES (%s, %s)"
     assert span.kind == SpanKind.CLIENT
     assert span.attributes["db.operation"] == "INSERT"
     assert span.attributes["db.row_count"] == 3
@@ -412,7 +412,7 @@ def test_patch_all_enables_postgres():
     spans = exporter.get_finished_spans()
     db_spans = [s for s in spans if s.attributes.get("db.system") == "postgresql"]
     assert len(db_spans) == 1
-    assert db_spans[0].name == "🐘 SELECT ?"
+    assert db_spans[0].name == "🟢 SELECT ?"
 
 
 def test_django_request_waterfall_with_db():
@@ -439,12 +439,12 @@ def test_django_request_waterfall_with_db():
         assert resp.status_code == 200
 
         spans = exporter.get_finished_spans()
-        req_span = next(s for s in spans if s.name == "django.request")
+        req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
         db_spans = [s for s in spans if s.attributes.get("db.system") == "postgresql"]
         assert len(db_spans) == 1
 
         db_span = db_spans[0]
-        assert db_span.name == "🐘 SELECT id, name FROM products WHERE category = ?"
+        assert db_span.name == "🟢 SELECT id, name FROM products WHERE category = ?"
         assert db_span.context.trace_id == req_span.context.trace_id
         assert db_span.attributes["db.role"] == "replica"
         assert db_span.attributes["peer.service"] == "postgres-slave1"
@@ -466,7 +466,7 @@ def test_is_installed_does_not_claim_psycopg3_support():
     """psycopg3 alone must not report the integration as installed.
 
     Only the Django seams trace psycopg3; the raw-driver seam is psycopg2-only.
-    Probing psycopg3 made a psycopg3-only host report "postgres: instrumented"
+    Probing psycopg3 made a psycopg3-only host report "🔵 instrumented"
     while emitting no spans at all, which is worse than reporting nothing.
     """
     import tracenest.integrations.postgres.integration as pg_int
@@ -569,7 +569,7 @@ def test_db_span_carries_alias_and_physical_db_name():
     assert len(spans) == 1
 
     span = spans[0]
-    assert span.name == "🐘 SELECT users_user.id FROM users_user WHERE is_active = ?"
+    assert span.name == "🟢 SELECT users_user.id FROM users_user WHERE is_active = ?"
     assert span.attributes["peer.service"] == "postgres-slave3db"
     assert span.attributes["db.name"] == "testpress"
     assert span.attributes["db.statement"] == "SELECT users_user.id FROM users_user WHERE is_active = ?"
@@ -607,7 +607,7 @@ def test_pgbouncer_single_span_attributes():
     assert len(spans) == 1
 
     span = spans[0]
-    assert span.name == "🔵 SELECT * FROM auth_user WHERE id = ?"
+    assert span.name == "🟢 SELECT * FROM auth_user WHERE id = ?"
     assert span.kind == SpanKind.CLIENT
     assert span.attributes["db.system"] == "postgresql"
     assert span.attributes["db.system.name"] == "postgresql"
@@ -665,7 +665,7 @@ def test_django_native_execute_wrapper_creates_span():
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
     span = spans[0]
-    assert span.name == "🐘 SELECT id FROM items WHERE active = ?"
+    assert span.name == "🟢 SELECT id FROM items WHERE active = ?"
     assert span.attributes["db.role"] == "replica"
     assert span.attributes["db.instance"] == "slave1"
     assert span.attributes["db.row_count"] == 3
@@ -722,8 +722,19 @@ def test_no_duplicate_spans_when_cursorwrapper_and_execute_wrappers_coexist():
     spans = exporter.get_finished_spans()
     # There MUST be exactly 1 span, not 2 nested duplicate spans
     assert len(spans) == 1
-    assert spans[0].name == "🐘 SELECT * FROM users WHERE active = ?"
+    assert spans[0].name == "🟢 SELECT * FROM users WHERE active = ?"
     assert spans[0].attributes["db.instance"] == "default"
+
+
+def test_suppress_db_instrumentation_disables_otel_dbapi():
+    """Verify suppress_db_instrumentation disables is_instrumentation_enabled for official OTel drivers."""
+    from opentelemetry.instrumentation.utils import is_instrumentation_enabled
+    from tracenest.integrations.postgres.cursor import suppress_db_instrumentation
+
+    assert is_instrumentation_enabled() is True
+    with suppress_db_instrumentation():
+        assert is_instrumentation_enabled() is False
+    assert is_instrumentation_enabled() is True
 
 
 def test_reentrant_guard_thread_isolation():
@@ -878,6 +889,26 @@ def test_db_statement_and_full_statement_separation():
     assert attrs2["db.statement"].endswith("...")
     assert len(attrs2["db.statement.full"]) > len(attrs2["db.statement"])
     assert attrs2["db.query.text"] == attrs2["db.statement.full"]
+
+
+def test_db_execute_wrapper_suppresses_downstream_driver_instrumentation():
+    """Verify that during DB query execution, downstream OTel instrumentors (psycopg2) are suppressed."""
+    from unittest.mock import MagicMock
+    from opentelemetry.instrumentation.utils import is_instrumentation_enabled
+    from tracenest.integrations.postgres.cursor import tracenest_django_db_execute_wrapper
+
+    instrumentation_state = []
+
+    def mock_execute(sql, params, many, context):
+        instrumentation_state.append(is_instrumentation_enabled())
+        return "ok"
+
+    context = {"connection": MagicMock(vendor="postgresql", alias="default")}
+    tracenest_django_db_execute_wrapper(mock_execute, "SELECT 1", None, False, context)
+
+    assert len(instrumentation_state) == 1
+    assert instrumentation_state[0] is False  # Suppressed!
+
 
 
 
