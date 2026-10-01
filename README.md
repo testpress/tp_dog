@@ -8,6 +8,7 @@ For a comprehensive overview of the architecture, components, workflows, and dec
 
 - [**TraceNest Observability Overview**](docs/Overview.md) — Complete end-to-end technical overview, architecture, component breakdown, resource usage benchmarks, current limitations, and decision index.
 - [**Operations Runbook**](docs/Runbook.md) — On-call operational guide, 6 essential questions with single-line answers, emergency killswitches, and collector diagnostics.
+- [**Production Deployment**](docs/Deployment.md) — Split deployment with the app + OTel Collector on one host and Tempo, Prometheus and Grafana on another; the URLs that must change, firewall rules, and verification steps.
 
 ---
 
@@ -136,7 +137,6 @@ Explicit `init()` arguments take precedence over environment variables, which ta
 | Version | `TRACENEST_VERSION` or `OTEL_SERVICE_VERSION` | `0.1.0` |
 | OTLP base endpoint | `TRACENEST_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
 | Trace endpoint | `TRACENEST_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Derived as `<endpoint>/v1/traces` |
-| Metric endpoint | `TRACENEST_METRICS_ENDPOINT` or `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Derived as `<endpoint>/v1/metrics` |
 | Trace sample rate | `TRACENEST_SAMPLE_RATE` or `OTEL_TRACES_SAMPLER_ARG` | `1.0` |
 | Disable the SDK | `TRACENEST_DISABLED` or `OTEL_SDK_DISABLED` | `false` |
 | Debug logging | `TRACENEST_DEBUG` or `OTEL_LOG_LEVEL=debug` | `false` |

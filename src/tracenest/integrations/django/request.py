@@ -227,13 +227,16 @@ def _preresolve_route(path: str, urlconf: Any = None, request: Any = None) -> st
         if root_urlconf and root_urlconf not in candidates:
             candidates.append(root_urlconf)
 
-        for attr in ("TENANT_URLCONF", "PUBLIC_SCHEMA_URLCONF", "EMAIL_REGISTER_URLCONF"):
+        for attr in ("TENANT_URLCONF", "PUBLIC_SCHEMA_URLCONF"):
             extra = getattr(settings, attr, None)
             if extra and extra not in candidates:
                 candidates.append(extra)
 
-        if root_urlconf and "testpress" in str(root_urlconf) and "testpress.email_register_urls" not in candidates:
-            candidates.append("testpress.email_register_urls")
+        extra_confs = getattr(settings, "TRACENEST_EXTRA_URLCONFS", None)
+        if isinstance(extra_confs, (list, tuple)):
+            for conf in extra_confs:
+                if conf and conf not in candidates:
+                    candidates.append(conf)
 
         for conf in candidates:
             try:

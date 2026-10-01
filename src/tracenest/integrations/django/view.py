@@ -72,18 +72,17 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
         tracer_name="tracenest.django",
     ) as span:
         _apply_tags(span)
+        method = attempt(getattr, request, "method", default="GET", _label="request.method")
         pre_route = attempt(
             _normalize_route, request, initial_route, default=initial_route, _label="normalize_route"
         )
         if pre_route and pre_route != "__unmatched__":
-            method = attempt(getattr, request, "method", default="GET", _label="request.method")
             set_request_route(pre_route, method)
 
         response = wrapped(*args, **kwargs)
         # Post-application enrichment must never alter the result. Each step
         # degrades independently so a failure here cannot affect what the
         # application returned.
-        method = attempt(getattr, request, "method", default="GET", _label="request.method")
         raw_view_name = attempt(_resolve_view_name, request, method, default="view", _label="view_name")
         norm_route = attempt(
             _normalize_route, request, initial_route, default=initial_route, _label="normalize_route"

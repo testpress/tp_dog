@@ -162,6 +162,9 @@ Here is the exact lifecycle of telemetry during an HTTP request:
    - Clicking an endpoint or trace link opens the Tempo waterfall showing exact line-by-line execution times.
 ```
 
+In a split production deployment the collector and Tempo sit on different hosts,
+so steps 4-5 become network links. See [Deployment.md](Deployment.md).
+
 ---
 
 ## 5. Docker Network & Port Mapping
@@ -178,5 +181,11 @@ Host Port     Container Port     Target Service      Description
 4318          4318               otel-collector      OTLP HTTP Receiver
 8889          8889               otel-collector      Prometheus Metrics Exporter
 ```
+
+When Tempo, Prometheus and Grafana are hosted on a separate observability
+server, Tempo's OTLP receivers (`4317`/`4318`) must additionally be published
+on that host so the remote collector can push to it. They are not published by
+the single-host stack above, because the collector reaches Tempo over the
+Docker bridge. See [Deployment.md](Deployment.md) §3.
 
 ---

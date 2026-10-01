@@ -500,8 +500,9 @@ def test_unmatched_route_normalization():
     assert req_span.attributes["url.path"] == "/scanners/probe"
 
 
-def test_dynamic_tenant_urlconf_resolution():
-    """Verify multi-tenant apps with dynamic request.urlconf or candidate URLconfs resolve correctly."""
+def test_dynamic_tenant_urlconf_resolution(monkeypatch):
+    """Verify multi-tenant apps with dynamic request.urlconf, TENANT_URLCONF, or TRACENEST_EXTRA_URLCONFS resolve correctly."""
+    from django.conf import settings
     from tracenest.integrations.django.request import _normalize_route, _preresolve_route
 
     class TenantReq:
@@ -516,6 +517,19 @@ def test_dynamic_tenant_urlconf_resolution():
     req.urlconf = "tests.test_django"
     route = _preresolve_route("/test/sample/", request=req)
     assert route == "/test/sample/"
+
+    # Test discovery via TENANT_URLCONF
+    req.urlconf = None
+    monkeypatch.setattr(settings, "TENANT_URLCONF", "tests.test_django", raising=False)
+    route = _preresolve_route("/test/sample/", request=req)
+    assert route == "/test/sample/"
+
+    # Test discovery via TRACENEST_EXTRA_URLCONFS
+    monkeypatch.delattr(settings, "TENANT_URLCONF", raising=False)
+    monkeypatch.setattr(settings, "TRACENEST_EXTRA_URLCONFS", ["tests.test_django"], raising=False)
+    route = _preresolve_route("/test/sample/", request=req)
+    assert route == "/test/sample/"
+
 
 
 
