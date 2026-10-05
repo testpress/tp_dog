@@ -216,6 +216,91 @@ def test_w3c_traceparent_propagation():
     assert format(req_span.parent.span_id, "016x") == parent_span_id
 
 
+def test_w3c_traceparent_ignored_when_extract_disabled():
+    """Verify incoming W3C traceparent headers are ignored when extract_trace_context=False."""
+    exporter = InMemorySpanExporter()
+    tracenest.init(
+        project_name="django-test-svc",
+        exporter=exporter,
+        export_batch=False,
+        extract_trace_context=False,
+    )
+
+    from django.core.handlers.wsgi import WSGIHandler
+    handler = WSGIHandler()
+    handler.load_middleware()
+
+    factory = RequestFactory()
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    parent_span_id = "00f067aa0ba902b7"
+    traceparent = f"00-{trace_id}-{parent_span_id}-01"
+
+    request = factory.get("/test/sample/", HTTP_TRACEPARENT=traceparent)
+    response = handler.get_response(request)
+    assert response.status_code == 200
+
+    spans = exporter.get_finished_spans()
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
+
+    # Must be a root span (no parent span)
+    assert req_span.parent is None
+    # Must have generated a new trace_id instead of adopting the external one
+    assert format(req_span.context.trace_id, "032x") != trace_id
+    # Incoming client header is preserved for debugging
+    assert req_span.attributes.get("http.client.traceparent") == traceparent
+
+
+def test_w3c_traceparent_callable_filter():
+    """Verify extract_trace_context accepts a callable to filter external callers."""
+    exporter = InMemorySpanExporter()
+    tracenest.init(
+        project_name="django-test-svc",
+        exporter=exporter,
+        export_batch=False,
+        extract_trace_context=lambda req: not req.META.get("HTTP_USER_AGENT", "").startswith("external-cli"),
+    )
+
+    from django.core.handlers.wsgi import WSGIHandler
+    handler = WSGIHandler()
+    handler.load_middleware()
+
+    factory = RequestFactory()
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    parent_span_id = "00f067aa0ba902b7"
+    traceparent = f"00-{trace_id}-{parent_span_id}-01"
+
+    # 1. External CLI request -> Should ignore traceparent
+    request_ext = factory.get(
+        "/test/sample/",
+        HTTP_TRACEPARENT=traceparent,
+        HTTP_USER_AGENT="external-cli/1.0",
+    )
+    res_ext = handler.get_response(request_ext)
+    assert res_ext.status_code == 200
+
+    spans = exporter.get_finished_spans()
+    ext_span = next(s for s in spans if s.kind == SpanKind.SERVER)
+    assert ext_span.parent is None
+    assert format(ext_span.context.trace_id, "032x") != trace_id
+
+    exporter.clear()
+
+    # 2. Internal / other request -> Should accept traceparent
+    request_in = factory.get(
+        "/test/sample/",
+        HTTP_TRACEPARENT=traceparent,
+        HTTP_USER_AGENT="internal-service/2.0",
+    )
+    res_in = handler.get_response(request_in)
+    assert res_in.status_code == 200
+
+    spans = exporter.get_finished_spans()
+    in_span = next(s for s in spans if s.kind == SpanKind.SERVER)
+    assert in_span.parent is not None
+    assert format(in_span.context.trace_id, "032x") == trace_id
+    assert format(in_span.parent.span_id, "016x") == parent_span_id
+
+
 def test_throttled_429_marks_span():
     """Verify 429 Too Many Requests sets status code correctly without 5xx error flag."""
     exporter = InMemorySpanExporter()

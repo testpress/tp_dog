@@ -149,6 +149,32 @@ def is_pgbouncer_connection(db_host: Any, db_port: Any) -> bool:
 suppress_db_instrumentation = suppress_instrumentation
 
 
+def _build_pool_span_context(
+    db_host: Any,
+    db_port: Any,
+    db_alias: Any,
+) -> Tuple[str, Dict[str, Any]]:
+    """Construct span name and attributes for the outer PgBouncer pool-wait span."""
+    try:
+        port_num = int(db_port) if db_port else 6432
+    except (ValueError, TypeError):
+        port_num = 6432
+    host_str = str(db_host) if db_host else "pgbouncer"
+    alias_str = str(db_alias) if db_alias else "default"
+
+    span_attrs: Dict[str, Any] = {
+        "db.system": "pgbouncer",
+        "db.system.name": "pgbouncer",
+        "db.connection.pool": "pgbouncer",
+        "db.instance": alias_str,
+        "net.peer.name": host_str,
+        "net.peer.port": port_num,
+        "server.address": host_str,
+        "server.port": port_num,
+    }
+    return "🔹 pgbouncer.pool_wait", span_attrs
+
+
 def _build_db_span_context(
     sql: Optional[str],
     instance_or_conn: Any,
@@ -164,7 +190,6 @@ def _build_db_span_context(
     span_attrs: Dict[str, Any] = {
         "db.system": db_vendor if db_vendor else "postgresql",
         "db.system.name": db_vendor if db_vendor else "postgresql",
-        "peer.service": "pgbouncer" if is_pgbouncer else peer_service,
         "db.name": str(db_name),
         "db.namespace": str(db_name),
         "db.instance": str(db_alias),
@@ -186,11 +211,28 @@ def _build_db_span_context(
         span_attrs["db.connection.pool"] = "pgbouncer"
     if db_user:
         span_attrs["db.user"] = str(db_user)
-    db_icon = "🟢"
-    span_name = f"{db_icon} {metric_sql}" if metric_sql else (f"🟢 pgbouncer.query" if is_pgbouncer else f"🟢 postgres.query")
+    span_name = f"🟢 {metric_sql}" if metric_sql else "🟢 postgres.query"
 
     return span_name, span_attrs
 
+
+
+def _emit_db_span(span_name: str, span_attrs: dict, execute_fn: Callable, cursor_obj: Any) -> Any:
+    with traced_span(
+        span_name,
+        kind=SpanKind.CLIENT,
+        attributes=span_attrs,
+        tracer_name="tracenest.postgres",
+    ) as span:
+        with suppress_db_instrumentation():
+            result = execute_fn()
+        rowcount = attempt(
+            getattr, cursor_obj, "rowcount", default=None, _label="db.rowcount"
+        )
+        if isinstance(rowcount, int) and rowcount >= 0:
+            safe_set_attribute(span, "db.row_count", rowcount)
+            safe_set_attribute(span, "db.response.returned_rows", rowcount)
+        return result
 
 def tracenest_django_db_execute_wrapper(
     execute: Callable,
@@ -220,24 +262,26 @@ def tracenest_django_db_execute_wrapper(
                 return execute(sql, params, many, context)
             span_name, span_attrs = db_ctx
 
-            with traced_span(
-                span_name,
-                kind=SpanKind.CLIENT,
-                attributes=span_attrs,
-                tracer_name="tracenest.postgres",
-            ) as span:
-                with suppress_db_instrumentation():
-                    result = execute(sql, params, many, context)
-                # Post-application enrichment. A closed or broken cursor can
-                # raise here (psycopg2 InterfaceError), which must not turn a
-                # successful statement into an application error.
-                rowcount = attempt(
-                    getattr, cursor, "rowcount", default=None, _label="db.rowcount"
+            if is_pgbouncer_connection(span_attrs.get("net.peer.name"), span_attrs.get("net.peer.port")):
+                pool_name, pool_attrs = _build_pool_span_context(
+                    span_attrs.get("net.peer.name"),
+                    span_attrs.get("net.peer.port"),
+                    span_attrs.get("db.instance", "default"),
                 )
-                if isinstance(rowcount, int) and rowcount >= 0:
-                    safe_set_attribute(span, "db.row_count", rowcount)
-                    safe_set_attribute(span, "db.response.returned_rows", rowcount)
-                return result
+                inner_attrs = dict(span_attrs)
+                inner_attrs["db.system"] = "postgresql"
+                inner_attrs["db.system.name"] = "postgresql"
+                inner_attrs.pop("db.connection.pool", None)
+
+                with traced_span(
+                    pool_name,
+                    kind=SpanKind.CLIENT,
+                    attributes=pool_attrs,
+                    tracer_name="tracenest.postgres",
+                ):
+                    return _emit_db_span(span_name, inner_attrs, lambda: execute(sql, params, many, context), cursor)
+            else:
+                return _emit_db_span(span_name, span_attrs, lambda: execute(sql, params, many, context), cursor)
     except Exception as exc:
         # Never retry: a failing statement has already been sent to the server and
         # re-sending it would double side effects. Propagate instead.
@@ -273,27 +317,28 @@ def traced_django_cursor_exec(
                 return wrapped(*args, **kwargs)
             span_name, span_attrs = db_ctx
 
-            with traced_span(
-                span_name,
-                kind=SpanKind.CLIENT,
-                attributes=span_attrs,
-                tracer_name="tracenest.postgres",
-            ) as span:
-                with suppress_db_instrumentation():
-                    result = wrapped(*args, **kwargs)
-                # Post-application enrichment. A closed or broken cursor can
-                # raise here (psycopg2 InterfaceError), which must not turn a
-                # successful statement into an application error.
-                cursor = attempt(
-                    getattr, instance, "cursor", default=instance, _label="db.cursor"
+            if is_pgbouncer_connection(span_attrs.get("net.peer.name"), span_attrs.get("net.peer.port")):
+                pool_name, pool_attrs = _build_pool_span_context(
+                    span_attrs.get("net.peer.name"),
+                    span_attrs.get("net.peer.port"),
+                    span_attrs.get("db.instance", "default"),
                 )
-                rowcount = attempt(
-                    getattr, cursor, "rowcount", default=None, _label="db.rowcount"
-                )
-                if isinstance(rowcount, int) and rowcount >= 0:
-                    safe_set_attribute(span, "db.row_count", rowcount)
-                    safe_set_attribute(span, "db.response.returned_rows", rowcount)
-                return result
+                inner_attrs = dict(span_attrs)
+                inner_attrs["db.system"] = "postgresql"
+                inner_attrs["db.system.name"] = "postgresql"
+                inner_attrs.pop("db.connection.pool", None)
+
+                with traced_span(
+                    pool_name,
+                    kind=SpanKind.CLIENT,
+                    attributes=pool_attrs,
+                    tracer_name="tracenest.postgres",
+                ):
+                    cursor = attempt(getattr, instance, "cursor", default=instance, _label="db.cursor")
+                    return _emit_db_span(span_name, inner_attrs, lambda: wrapped(*args, **kwargs), cursor)
+            else:
+                cursor = attempt(getattr, instance, "cursor", default=instance, _label="db.cursor")
+                return _emit_db_span(span_name, span_attrs, lambda: wrapped(*args, **kwargs), cursor)
     except Exception as exc:
         # Never retry: the statement has already been executed, and re-running it
         # would double side effects. Propagate instead.

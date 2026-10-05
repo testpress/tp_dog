@@ -114,36 +114,34 @@ Database-driver behavior becomes part of our instrumentation surface and require
 
 ---
 
-## Decision 6 — Identify PgBouncer separately from PostgreSQL
+## Decision 6 — Identify PgBouncer separately from PostgreSQL via Nested Spans
 
 **Why?**
 
-A slow database operation does not necessarily mean PostgreSQL itself is slow. Connection-pool contention (waiting for an available server connection) occurs before the query reaches PostgreSQL.
+A slow database operation does not necessarily mean PostgreSQL itself is slow. Connection-pool contention (waiting for an available server connection in the pool) occurs before the query reaches PostgreSQL.
 
-By identifying PgBouncer connections separately, a query that traversed the
-pooler can be told apart from one that reached PostgreSQL directly:
+By identifying PgBouncer connections separately and structuring pooled queries as nested spans, pooler wait time is visually and temporally distinguishable from PostgreSQL query execution time:
 
 ```text
-Application
-    ↓
-[span] 🔵 via PgBouncer  (db.connection.pool=pgbouncer, peer.service=pgbouncer)
-    ↓
-[span] 🐘 direct to PostgreSQL  (peer.service=postgres[-<alias>])
+Path A — via Connection Pooler (Nested Two-Span Architecture):
+Application ──> PgBouncer :6432 ──> PostgreSQL
+    [outer span] 🔹 pgbouncer.pool_wait  (db.system="pgbouncer", db.connection.pool="pgbouncer")
+       └── [inner span] 🟢 SELECT ...    (db.system="postgresql", db.statement=..., row_count=...)
+
+Path B — Direct to Database:
+Application ─────────────────────> PostgreSQL :5432
+    [single span] 🟢 SELECT ...  (db.system="postgresql")
 ```
 
-Pooler wait and engine execution are **not** split into two spans — a single
-span covers the whole round trip. They are separated analytically instead, by
-filtering on `db.connection.pool` / `peer.service` and comparing against the
-Collector-scraped `postgresql_*` engine metrics (see point 3 below).
-
-**How We Detect It:**
+**How We Implement It:**
 1. **Connection Metadata Inspection**: At cursor execution time, `is_pgbouncer_connection()` inspects Django's active database connection settings:
    - Evaluates whether `db_port == 6432` or the host name matches `pgbouncer`.
-2. **Explicit Span Attribution**:
-   - Injects `db.connection.pool="pgbouncer"` and `peer.service="pgbouncer"` into span attributes.
-   - Distinct visual naming: Prefixes the span with the **`🔵`** blue icon (`🔵 SELECT api_product...`) rather than the direct database icon (**`🐘`**).
-3. **Collector-Side Correlation**:
-   - The OTel Collector scrapes PostgreSQL engine metrics (`postgresql_*`), which correlate with span-level database wait and execution times.
+2. **Nested Two-Span Model**:
+   - **Outer Span** (`🔹 pgbouncer.pool_wait`): Represents the connection-pool phase, attributed with `db.system="pgbouncer"` and `db.connection.pool="pgbouncer"`.
+   - **Inner Child Span** (`🟢 SELECT ...`): Wraps the actual query execution with `db.system="postgresql"`, the sanitized SQL statement, and row count metrics.
+   - The pool wait overhead corresponds to the duration difference between the outer span and the inner span in the waterfall.
+3. **Collector-Side Topology**:
+   - The outer span attributes PgBouncer in the service catalog and topology graphs, while the inner span links query execution directly to PostgreSQL.
 
 ---
 

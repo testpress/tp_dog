@@ -115,6 +115,7 @@ class SDKConfig:
     trusted_proxies: List[str] = field(default_factory=list)
     db_role_map: Dict[str, str] = field(default_factory=dict)
     auto_patch: bool = True
+    extract_trace_context: Any = True
 
     @classmethod
     def from_env_and_kwargs(
@@ -134,6 +135,7 @@ class SDKConfig:
         resource_attributes: Optional[Dict[str, Any]] = None,
         integrations: Optional[Dict[str, bool]] = None,
         auto_patch: Optional[bool] = None,
+        extract_trace_context: Optional[Any] = None,
         **extra: Any,
     ) -> "SDKConfig":
         """Build SDKConfig by prioritizing explicit kwargs over environment variables."""
@@ -302,6 +304,7 @@ class SDKConfig:
             "service", "service_name", "cluster",
             "db_role_map", "DB_ROLE_MAP", "trusted_proxies", "TRUSTED_PROXIES",
             "cache_enabled", "CACHE_ENABLED", "auto_patch", "AUTO_PATCH",
+            "extract_trace_context", "EXTRACT_TRACE_CONTEXT",
         }
         for k, v in extra.items():
             if k not in KNOWN_EXTRA_KEYS and not k.startswith("_"):
@@ -374,6 +377,24 @@ class SDKConfig:
         else:
             resolved_auto_patch = True
 
+        # 15. Extract trace context (W3C propagation from incoming HTTP requests)
+        kwarg_extract = (
+            extract_trace_context
+            if extract_trace_context is not None
+            else (extra.get("extract_trace_context") if "extract_trace_context" in extra else extra.get("EXTRACT_TRACE_CONTEXT"))
+        )
+        if kwarg_extract is not None:
+            if callable(kwarg_extract):
+                resolved_extract = kwarg_extract
+            else:
+                resolved_extract = _str_to_bool(kwarg_extract, default=True)
+        elif "TRACENEST_EXTRACT_TRACE_CONTEXT" in os.environ:
+            resolved_extract = _str_to_bool(os.environ["TRACENEST_EXTRACT_TRACE_CONTEXT"], default=True)
+        elif "OTEL_PROPAGATORS" in os.environ and os.environ["OTEL_PROPAGATORS"].strip().lower() in ("none", "off", "0"):
+            resolved_extract = False
+        else:
+            resolved_extract = True
+
         return cls(
             project_name=resolved_project,
             cluster_name=resolved_cluster,
@@ -398,4 +419,5 @@ class SDKConfig:
             trusted_proxies=resolved_trusted_proxies,
             db_role_map=resolved_db_role_map,
             auto_patch=resolved_auto_patch,
+            extract_trace_context=resolved_extract,
         )

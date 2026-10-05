@@ -38,7 +38,6 @@ def setup_telemetry():
                 "test": "HEHE"
             },
             sample_rate=1.0,
-            ignore_endpoints=["/api/products/health/"],
             endpoint_sample_rules={
                 "/api/s3-storage/": 1.0,
             },

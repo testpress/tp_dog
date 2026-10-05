@@ -50,9 +50,9 @@ Two seams are patched — Django's `execute_wrappers` and the database backend's
 
 | Span Name / Pattern | Kind | Description | Key Attributes |
 | :--- | :--- | :--- | :--- |
-| **`🐘 <normalized_sql>`** | `CLIENT` | Direct PostgreSQL database query (e.g. `🐘 SELECT * FROM users WHERE id = ?`) | `db.system="postgresql"`, `db.statement`, `db.operation`, `db.role="primary"`, `db.instance` |
-| **`🔵 <normalized_sql>`** | `CLIENT` | Query executed through **PgBouncer** connection pool | `db.system="postgresql"`, `db.statement`, `db.connection.pool="pgbouncer"`, `peer.service="pgbouncer"` |
-| **`🐘 postgres.query`** | `CLIENT` | Fallback span name when SQL statement is empty or unavailable | `db.system="postgresql"`, `db.role`, `db.instance` |
+| **`🟢 <normalized_sql>`** | `CLIENT` | Direct PostgreSQL database query (e.g. `🟢 SELECT * FROM users WHERE id = ?`) | `db.system="postgresql"`, `db.statement`, `db.operation`, `db.role="primary"`, `db.instance` |
+| **`🔹 <normalized_sql>`** | `CLIENT` | Query executed through **PgBouncer** connection pool | `db.system="postgresql"`, `db.statement`, `db.connection.pool="pgbouncer"` |
+| **`🟢 postgres.query`** | `CLIENT` | Fallback span name when SQL statement is empty or unavailable | `db.system="postgresql"`, `db.role`, `db.instance` |
 
 > **Span name vs. `db.statement`**: the span name and `db.statement` use the
 > *metric-normalized* form (comments stripped, `IN (…)` arity collapsed, batch
@@ -72,8 +72,8 @@ Instruments Redis client commands and Django cache operations.
 
 | Span Name / Pattern | Kind | Description | Key Attributes |
 | :--- | :--- | :--- | :--- |
-| **`<COMMAND>`** (e.g. `GET`, `SET`, `HGETALL`) | `CLIENT` | Direct low-level Redis client commands via official `RedisInstrumentor` | `db.system="redis"`, `db.operation`, `db.statement`, `net.peer.name` |
-| **`PIPELINE`** | `CLIENT` | Redis batch pipeline execution | `db.system="redis"`, `db.operation="PIPELINE"` |
+| **`🔸 <COMMAND>`** (e.g. `🔸 GET`, `🔸 SET`) | `CLIENT` | Direct low-level Redis client commands via `RedisInstrumentor` with custom hook | `db.system="redis"`, `db.operation`, `db.statement`, `net.peer.name` |
+| **`🔸 PIPELINE`** | `CLIENT` | Redis batch pipeline execution | `db.system="redis"`, `db.operation="PIPELINE"` |
 | **`🔴 django_redis.cache.<op>`** | `INTERNAL` | Django cache operations (`get`, `set`, `delete_many`, etc.) | `django.cache.operation`, `django.cache.backend`, `django.cache.key`, `django.cache.hit` |
 
 ### Key Features
@@ -107,10 +107,12 @@ Instruments AWS SDK operations (S3, SQS, DynamoDB, or local MinIO/mock services)
 
 | Span Name / Pattern | Kind | Description | Key Attributes |
 | :--- | :--- | :--- | :--- |
-| **`aws.<service>.<operation>`** | `CLIENT` | AWS SDK operation (e.g. `aws.s3.GetObject`, `aws.sqs.SendMessage`) | `rpc.system="aws-api"`, `rpc.service`, `rpc.method`, `aws.bucket` |
+| **`🪣 S3.<Operation>`** (e.g. `🪣 S3.ListObjectsV2`, `🪣 S3.PutObject`) | `CLIENT` | Amazon S3 / MinIO object storage operations | `rpc.system="aws-api"`, `rpc.service="s3"`, `rpc.method`, `aws.region` |
+| **`☁️ <Service>.<Operation>`** | `CLIENT` | Other AWS SDK operations (e.g. SQS, DynamoDB) | `rpc.system="aws-api"`, `rpc.service`, `rpc.method` |
 
 ### Key Features
 - Captures RPC method, target resource names (e.g., S3 bucket name), and response status codes.
+- Distinguishes S3 bucket/object operations with `🪣` icon in trace waterfalls and flamegraphs.
 
 ---
 

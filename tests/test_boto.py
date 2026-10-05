@@ -59,3 +59,34 @@ def test_boto_integration_instrument_lifecycle():
     # Re-instrument
     boto_inst.instrument()
     assert boto_inst._instrumented is True
+
+
+def test_boto_request_hook_s3_icon():
+    """Verify _tracenest_boto_request_hook prefixes S3 spans with 🪣."""
+    from tracenest.integrations.boto.integration import (
+        _tracenest_boto_request_hook,
+        _tracenest_boto_response_hook,
+    )
+
+    class MockSpan:
+        def __init__(self, name):
+            self.name = name
+
+        def is_recording(self):
+            return True
+
+        def update_name(self, new_name):
+            self.name = new_name
+
+    s3_span = MockSpan("S3.ListObjectsV2")
+    _tracenest_boto_request_hook(s3_span, "s3", "ListObjectsV2", {})
+    assert s3_span.name == "🪣 S3.ListObjectsV2"
+
+    # Idempotent: should not double-prefix
+    _tracenest_boto_response_hook(s3_span, "s3", "ListObjectsV2", {})
+    assert s3_span.name == "🪣 S3.ListObjectsV2"
+
+    # Non-S3 AWS call gets ☁️
+    sqs_span = MockSpan("SQS.SendMessage")
+    _tracenest_boto_request_hook(sqs_span, "sqs", "SendMessage", {})
+    assert sqs_span.name == "☁️ SQS.SendMessage"

@@ -239,9 +239,8 @@ whole round trip. Separate them analytically:
 3. Switch `$operation` in **Generic Operation Details** to the slow sanitized
    SQL, and use the TraceQL trace list to see which Django views trigger it.
 
-Pooler-routed spans carry `db.connection.pool="pgbouncer"` and
-`peer.service="pgbouncer"`; direct spans carry `peer.service="postgres[-<alias>]"`.
-Tempo span names are prefixed `🔵` for pooled and `🐘` for direct.
+Pooler-routed spans carry `db.connection.pool="pgbouncer"`.
+Tempo span names are prefixed `🔹` for pooled and `🟢` for direct PostgreSQL queries (and `🔸` for Redis).
 
 ---
 

@@ -52,6 +52,20 @@ def _is_redis_backend(instance: Any) -> bool:
     return False
 
 
+def _extract_redis_server_info(instance: Any) -> tuple:
+    try:
+        server = getattr(instance, "_server", None) or getattr(instance, "_servers", None)
+        if isinstance(server, (list, tuple)) and server:
+            server = server[0]
+        if isinstance(server, str) and "://" in server:
+            from urllib.parse import urlparse
+            parsed = urlparse(server)
+            return parsed.hostname, parsed.port
+    except Exception:
+        pass
+    return None, None
+
+
 def make_traced_cache_op(op_name: str):
     def _traced_op(wrapped: Callable, instance: Any, args: Any, kwargs: Any) -> Any:
         # Pre-application telemetry must never prevent the cache operation from
@@ -66,10 +80,13 @@ def make_traced_cache_op(op_name: str):
 
         backend_cls = attempt(getattr, instance.__class__, "__name__", default="cache", _label="cache_backend_cls")
 
-        if _is_redis_backend(instance):
+        is_redis = _is_redis_backend(instance)
+        if is_redis:
             span_name = f"🔸 django_redis.cache.{op_name}"
+            span_kind = SpanKind.CLIENT
         else:
             span_name = f"django.cache.{op_name}"
+            span_kind = SpanKind.INTERNAL
 
         key = None
         if args:
@@ -82,14 +99,18 @@ def make_traced_cache_op(op_name: str):
         span_attrs = {
             "django.cache.operation": op_name,
             "django.cache.backend": backend_cls,
-            # Deliberately no db.system. The collector derives
-            # `normalized.service` from db.system when no peer.service exists
-            # (otel-collector-config.yaml), so "cache" here minted a phantom
-            # pseudo-service in the service dropdown and generic dashboards,
-            # double-counting the same work that the nested OTel Redis span
-            # already reports under db.system="redis". Cache latency belongs to
-            # the Django service, where it actually occurs.
         }
+        if is_redis:
+            span_attrs["db.system"] = "redis"
+            span_attrs["db.operation"] = op_name
+            span_attrs["db.name"] = "redis"
+            span_attrs["peer.service"] = "redis"
+            server_addr, server_port = _extract_redis_server_info(instance)
+            if server_addr:
+                span_attrs["server.address"] = server_addr
+            if server_port:
+                span_attrs["server.port"] = server_port
+
         if key is not None:
             if isinstance(key, (list, tuple, set)):
                 span_attrs["django.cache.key"] = ", ".join(str(k) for k in key)
@@ -98,7 +119,7 @@ def make_traced_cache_op(op_name: str):
 
         token = _in_cache_span.set(True)
         try:
-            with traced_span(span_name, kind=SpanKind.INTERNAL, attributes=span_attrs, tracer_name="tracenest.django") as span:
+            with traced_span(span_name, kind=span_kind, attributes=span_attrs, tracer_name="tracenest.django") as span:
                 with suppress_instrumentation():
                     res = wrapped(*args, **kwargs)
                 if op_name == "get":

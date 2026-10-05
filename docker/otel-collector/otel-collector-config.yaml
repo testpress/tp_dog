@@ -45,10 +45,10 @@ processors:
     trace_statements:
     - context: span
       statements:
-      - set(attributes["peer.service"], "pgbouncer") where attributes["server.address"] == "pgbouncer" or attributes["server.port"] == 6432 or attributes["server.port"] == "6432"
-      - set(attributes["peer.service"], "redis") where attributes["db.system"] == "redis"
-      - set(attributes["peer.service"], "postgres") where (attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres") and attributes["peer.service"] == nil
-      - set(attributes["db.name"], attributes["peer.service"]) where attributes["peer.service"] != nil and (attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres")
+      - set(attributes["normalized.service"], "pgbouncer") where attributes["server.address"] == "pgbouncer" or attributes["server.port"] == 6432 or attributes["server.port"] == "6432" or attributes["db.connection.pool"] == "pgbouncer"
+      - set(attributes["normalized.service"], "redis") where attributes["db.system"] == "redis"
+      - set(attributes["normalized.service"], "postgres") where attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres"
+      - delete_key(attributes, "peer.service") where (attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres" or attributes["db.system"] == "redis")
       - set(attributes["db.name"], "redis") where attributes["db.system"] == "redis"
       - set(attributes["normalized.service"], "aws-s3") where attributes["rpc.system"] == "aws-api"
       - set(attributes["normalized.service"], attributes["peer.service"]) where attributes["normalized.service"] == nil and attributes["peer.service"] != nil

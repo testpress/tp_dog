@@ -58,6 +58,7 @@ def init(
     span_processor: Optional[SpanProcessor] = None,
     export_batch: bool = True,
     auto_patch: bool = True,
+    extract_trace_context: Optional[Any] = None,
     **kwargs: Any,
 ) -> TracerProvider:
     """
@@ -102,6 +103,7 @@ def init(
             resource_attributes=resource_attributes,
             integrations=integrations,
             auto_patch=auto_patch,
+            extract_trace_context=extract_trace_context,
             **kwargs,
         )
         _ACTIVE_CONFIG = config

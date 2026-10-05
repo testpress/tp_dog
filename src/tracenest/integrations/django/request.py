@@ -314,7 +314,18 @@ def traced_get_response(wrapped, instance, args, kwargs):
                 elif k in ("CONTENT_TYPE", "CONTENT_LENGTH"):
                     carrier[k.replace("_", "-").lower()] = str(v)
 
-        parent_ctx = extract(carrier)
+        cfg = attempt(_get_config, default=None, _label="request_config")
+        extract_setting = getattr(cfg, "extract_trace_context", True) if cfg else True
+        if callable(extract_setting):
+            try:
+                should_extract = bool(extract_setting(request))
+            except Exception:
+                logger.debug("extract_trace_context callable raised", exc_info=True)
+                should_extract = True
+        else:
+            should_extract = bool(extract_setting)
+
+        parent_ctx = extract(carrier) if should_extract else None
 
         try:
             raw_url = request.build_absolute_uri() if hasattr(request, "build_absolute_uri") else path
@@ -343,10 +354,11 @@ def traced_get_response(wrapped, instance, args, kwargs):
             "user_agent.original": ua,
             "http.user_agent": ua,
         }
+        if not should_extract and carrier.get("traceparent"):
+            span_attrs["http.client.traceparent"] = carrier["traceparent"]
         if url_query:
             span_attrs["url.query"] = url_query
         if hasattr(request, "META") and isinstance(request.META, dict):
-            cfg = attempt(_get_config, default=None, _label="request_config")
             trusted = cfg.trusted_proxies if cfg else []
             client_ip = _resolve_client_address(request, trusted)
             if client_ip:

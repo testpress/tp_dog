@@ -26,7 +26,7 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "← Service Overview",
+      "title": "\u2190 Service Overview",
       "tooltip": "Back to Generic Service Overview",
       "type": "link",
       "url": "/d/generic-service-overview"
@@ -55,7 +55,7 @@
       },
       "id": 100,
       "options": {
-        "content": "<div style=\"display: flex; gap: 12px; align-items: center; padding: 6px 0;\">\n  <a href=\"/d/generic-service-overview?var-service=${service}&var-project=${project}&${__url_time_range}\" style=\"background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">← Service Overview</a>\n  <a href=\"/d/service-catalog?${__all_variables}&${__url_time_range}\" style=\"background: rgba(255, 255, 255, 0.06); color: #e2e8f0; border: 1px solid rgba(255, 255, 255, 0.15); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">← Project Catalog</a>\n  <span style=\"color: #ef4444; font-weight: 600; font-size: 14px; margin-left: 12px;\">Error & Exception Triage for <span style=\"color: #ffffff;\">${service}</span></span>\n</div>",
+        "content": "<div style=\"display: flex; gap: 12px; align-items: center; padding: 6px 0;\">\n  <a href=\"/d/generic-service-overview?var-service=${service}&var-project=${project}&${__url_time_range}\" style=\"background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">\u2190 Service Overview</a>\n  <a href=\"/d/service-catalog?${__all_variables}&${__url_time_range}\" style=\"background: rgba(255, 255, 255, 0.06); color: #e2e8f0; border: 1px solid rgba(255, 255, 255, 0.15); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">\u2190 Project Catalog</a>\n  <span style=\"color: #ef4444; font-weight: 600; font-size: 14px; margin-left: 12px;\">Error & Exception Triage for <span style=\"color: #ffffff;\">${service}</span></span>\n</div>",
         "defaultContent": "",
         "editorMode": "code",
         "mode": "html"
@@ -560,27 +560,7 @@
               },
               {
                 "id": "displayName",
-                "value": "PROJECT"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#a855f7",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "<root span not yet received>": {
-                        "text": "${service}"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
+                "value": "SERVICE"
               }
             ]
           },
@@ -591,19 +571,8 @@
             },
             "properties": [
               {
-                "id": "custom.width",
-                "value": 460
-              },
-              {
                 "id": "displayName",
-                "value": "NAME"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#38bdf8",
-                  "mode": "fixed"
-                }
+                "value": "RESOURCE"
               }
             ]
           },
@@ -615,7 +584,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 120
+                "value": 100
               },
               {
                 "id": "displayName",
@@ -623,34 +592,59 @@
               },
               {
                 "id": "unit",
-                "value": "dtdurations"
-              },
-              {
-                "id": "decimals",
-                "value": 2
+                "value": "ms"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "traceID"
+              "options": "span.http.method"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 240
+                "value": 100
               },
               {
                 "id": "displayName",
-                "value": "TRACE ID"
+                "value": "METHOD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "span.http.status_code"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
               },
               {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#ef4444",
-                  "mode": "fixed"
-                }
+                "id": "displayName",
+                "value": "STATUS CODE"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "spanCount"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              },
+              {
+                "id": "displayName",
+                "value": "SPANS"
               }
             ]
           }
@@ -689,7 +683,7 @@
             "uid": "tempo"
           },
           "limit": 50,
-          "query": "{ (span.normalized.service =~ `(?i)${service:regex}` || resource.service.name =~ `(?i)${service:regex}`) && status = error }",
+          "query": "{ span.normalized.service =~ `(?i)${service:regex}` && (status = error || status_code = STATUS_CODE_ERROR || error = true) }",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"

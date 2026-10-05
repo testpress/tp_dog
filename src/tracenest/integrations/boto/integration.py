@@ -2,12 +2,36 @@
 
 import importlib
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from tracenest.config import SDKConfig
 from tracenest.integrations.base import BaseIntegration
 
 logger = logging.getLogger("tracenest.integrations.boto")
+
+
+def _tracenest_boto_request_hook(span: Any, service: str, operation: str, params: Any) -> None:
+    try:
+        if span is not None and getattr(span, "is_recording", lambda: True)():
+            name = getattr(span, "name", "")
+            icon = "🪣" if str(service).lower() == "s3" or str(name).startswith("S3.") else "☁️"
+            if name and not name.startswith("🪣") and not name.startswith("☁️"):
+                if hasattr(span, "update_name"):
+                    span.update_name(f"{icon} {name}")
+    except Exception as exc:
+        logger.debug("boto hook error", exc_info=True)
+
+
+def _tracenest_boto_response_hook(span: Any, service: str, operation: str, result: Any) -> None:
+    try:
+        if span is not None and getattr(span, "is_recording", lambda: True)():
+            name = getattr(span, "name", "")
+            icon = "🪣" if str(service).lower() == "s3" or str(name).startswith("S3.") else "☁️"
+            if name and not name.startswith("🪣") and not name.startswith("☁️"):
+                if hasattr(span, "update_name"):
+                    span.update_name(f"{icon} {name}")
+    except Exception as exc:
+        logger.debug("boto hook error", exc_info=True)
 
 
 class BotoIntegration(BaseIntegration):
@@ -31,7 +55,10 @@ class BotoIntegration(BaseIntegration):
 
             instrumentor = BotocoreInstrumentor()
             if not instrumentor.is_instrumented_by_opentelemetry:
-                instrumentor.instrument()
+                instrumentor.instrument(
+                    request_hook=_tracenest_boto_request_hook,
+                    response_hook=_tracenest_boto_response_hook,
+                )
         except Exception as exc:
             logger.debug("BotocoreInstrumentor patch skipped: %s", exc)
 

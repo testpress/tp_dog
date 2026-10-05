@@ -140,7 +140,7 @@ def test_select_creates_span():
     assert span.attributes["server.address"] == "pg-primary.prod"
     assert span.attributes["server.port"] == 5432
     assert span.attributes["db.user"] == "app_user"
-    assert span.attributes["peer.service"] == "postgres"
+    assert "peer.service" not in span.attributes
     assert span.attributes["db.row_count"] == 5
     assert span.status.status_code == StatusCode.OK
 
@@ -179,7 +179,7 @@ def test_primary_role_detected():
 
     spans = exporter.get_finished_spans()
     assert spans[0].attributes["db.role"] == "primary"
-    assert spans[0].attributes["peer.service"] == "postgres"
+    assert "peer.service" not in spans[0].attributes
 
 
 def test_replica_role_detected():
@@ -199,7 +199,7 @@ def test_replica_role_detected():
 
     assert span.attributes["db.role"] == "replica"
     assert span.attributes["db.instance"] == "slave1db"
-    assert span.attributes["peer.service"] == "postgres-slave1db"
+    assert "peer.service" not in span.attributes
 
 
 def test_db_role_map_and_false_positive_prevention():
@@ -447,7 +447,7 @@ def test_django_request_waterfall_with_db():
         assert db_span.name == "🟢 SELECT id, name FROM products WHERE category = ?"
         assert db_span.context.trace_id == req_span.context.trace_id
         assert db_span.attributes["db.role"] == "replica"
-        assert db_span.attributes["peer.service"] == "postgres-slave1"
+        assert "peer.service" not in db_span.attributes
         assert db_span.attributes["db.name"] == "shop_db"
         assert db_span.kind == SpanKind.CLIENT
     finally:
@@ -570,15 +570,15 @@ def test_db_span_carries_alias_and_physical_db_name():
 
     span = spans[0]
     assert span.name == "🟢 SELECT users_user.id FROM users_user WHERE is_active = ?"
-    assert span.attributes["peer.service"] == "postgres-slave3db"
+    assert "peer.service" not in span.attributes
     assert span.attributes["db.name"] == "testpress"
     assert span.attributes["db.statement"] == "SELECT users_user.id FROM users_user WHERE is_active = ?"
     assert span.attributes["db.row_count"] == 3
     assert span.kind == SpanKind.CLIENT
 
 
-def test_pgbouncer_single_span_attributes():
-    """Verify queries routed through PgBouncer produce a single DB CLIENT span with pgbouncer peer attributes."""
+def test_pgbouncer_nested_spans():
+    """Verify queries routed through PgBouncer produce an outer pool-wait span and an inner DB execution span."""
     tracenest._reset_for_testing()
     exporter = InMemorySpanExporter()
     tracenest.init(
@@ -604,22 +604,88 @@ def test_pgbouncer_single_span_attributes():
     wrapper.execute("SELECT * FROM auth_user WHERE id = 1")
 
     spans = exporter.get_finished_spans()
-    assert len(spans) == 1
+    assert len(spans) == 2
 
-    span = spans[0]
-    assert span.name == "🟢 SELECT * FROM auth_user WHERE id = ?"
-    assert span.kind == SpanKind.CLIENT
-    assert span.attributes["db.system"] == "postgresql"
-    assert span.attributes["db.system.name"] == "postgresql"
-    assert span.attributes["peer.service"] == "pgbouncer"
-    assert span.attributes["db.connection.pool"] == "pgbouncer"
-    assert span.attributes["server.address"] == "pgbouncer"
-    assert span.attributes["server.port"] == 6432
-    assert span.attributes["db.name"] == "django_otel"
-    assert span.attributes["db.namespace"] == "django_otel"
-    assert span.attributes["db.operation.name"] == "SELECT"
-    assert span.attributes["db.query.summary"] == "SELECT auth_user"
-    assert span.attributes["db.response.returned_rows"] == 5
+    # Inner span finishes first, outer pool-wait span finishes second
+    inner_span = spans[0]
+    outer_span = spans[1]
+
+    # Verify outer PgBouncer pool-wait span
+    assert outer_span.name == "🔹 pgbouncer.pool_wait"
+    assert outer_span.kind == SpanKind.CLIENT
+    assert outer_span.attributes["db.system"] == "pgbouncer"
+    assert outer_span.attributes["db.system.name"] == "pgbouncer"
+    assert outer_span.attributes["db.connection.pool"] == "pgbouncer"
+    assert outer_span.attributes["server.address"] == "pgbouncer"
+    assert outer_span.attributes["server.port"] == 6432
+    assert "peer.service" not in outer_span.attributes
+
+    # Verify inner PostgreSQL query execution span
+    assert inner_span.name == "🟢 SELECT * FROM auth_user WHERE id = ?"
+    assert inner_span.kind == SpanKind.CLIENT
+    assert inner_span.parent.span_id == outer_span.context.span_id
+    assert inner_span.context.trace_id == outer_span.context.trace_id
+    assert inner_span.attributes["db.system"] == "postgresql"
+    assert inner_span.attributes["db.system.name"] == "postgresql"
+    assert "peer.service" not in inner_span.attributes
+    assert "db.connection.pool" not in inner_span.attributes
+    assert inner_span.attributes["server.address"] == "pgbouncer"
+    assert inner_span.attributes["server.port"] == 6432
+    assert inner_span.attributes["db.name"] == "django_otel"
+    assert inner_span.attributes["db.namespace"] == "django_otel"
+    assert inner_span.attributes["db.operation.name"] == "SELECT"
+    assert inner_span.attributes["db.query.summary"] == "SELECT auth_user"
+    assert inner_span.attributes["db.response.returned_rows"] == 5
+
+
+def test_pgbouncer_execute_wrapper_nested_spans():
+    """Verify execute_wrapper produces nested pool-wait and DB execute spans for PgBouncer."""
+    tracenest._reset_for_testing()
+    exporter = InMemorySpanExporter()
+    tracenest.init(
+        project_name="pgbouncer-exec-svc",
+        exporter=exporter,
+        export_batch=False,
+    )
+    from tracenest.integrations.postgres.cursor import tracenest_django_db_execute_wrapper
+
+    mock_db = MockDatabaseConnection(
+        alias="default",
+        vendor="postgresql",
+        host="pgbouncer",
+        port=6432,
+        db_name="django_otel",
+        user="django",
+    )
+    raw_cursor = MockRawCursor(rowcount=3)
+    executed = []
+
+    def mock_exec(sql, params, many, context):
+        executed.append((sql, params))
+        return "ok"
+
+    res = tracenest_django_db_execute_wrapper(
+        mock_exec,
+        "SELECT id FROM auth_user WHERE is_staff = 1",
+        (1,),
+        False,
+        {"connection": mock_db, "cursor": raw_cursor},
+    )
+    assert res == "ok"
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 2
+
+    inner_span = spans[0]
+    outer_span = spans[1]
+
+    assert outer_span.name == "🔹 pgbouncer.pool_wait"
+    assert outer_span.attributes["db.system"] == "pgbouncer"
+
+    assert inner_span.name == "🟢 SELECT id FROM auth_user WHERE is_staff = ?"
+    assert inner_span.parent.span_id == outer_span.context.span_id
+    assert inner_span.attributes["db.system"] == "postgresql"
+    assert inner_span.attributes["db.response.returned_rows"] == 3
 
 
 def test_suppress_driver_instrumentation_prevents_duplicate_spans():

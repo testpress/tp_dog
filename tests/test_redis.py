@@ -39,7 +39,8 @@ def test_redis_integration_manager_registration():
 
 
 def test_django_redis_cache_tracing(memory_exporter):
-    """Verify that django_redis cache backends emit django_redis.cache.<op> spans."""
+    """Verify that django_redis cache backends emit django_redis.cache.<op> spans with db.system='redis'."""
+    from opentelemetry.trace import SpanKind
     from tracenest.integrations.django.cache import make_traced_cache_op
 
     class FakeRedisCache:
@@ -58,28 +59,26 @@ def test_django_redis_cache_tracing(memory_exporter):
     assert len(spans) == 1
     span = spans[0]
 
-    # Span name must have redis prefix
+    # Span name must have redis prefix and CLIENT kind
     assert span.name == "🔸 django_redis.cache.get"
+    assert span.kind == SpanKind.CLIENT
     assert span.attributes["django.cache.operation"] == "get"
     assert span.attributes["django.cache.key"] == "tenant:subdomain.com"
     assert span.attributes["django.cache.backend"] == "FakeRedisCache"
     assert span.attributes["django.cache.hit"] is True
+    assert span.attributes["db.system"] == "redis"
+    assert span.attributes["db.operation"] == "get"
+    assert span.attributes["peer.service"] == "redis"
 
 
-def test_cache_span_does_not_claim_a_db_system(memory_exporter):
-    """Cache spans must not set db.system, which would mint a phantom service.
-
-    The collector derives ``normalized.service`` from ``db.system`` whenever a
-    span has no ``peer.service`` (otel-collector-config.yaml, transform/normalize).
-    Setting ``db.system="cache"`` therefore produced a service literally named
-    "cache" in the ``$service`` dropdown of both generic dashboards, splitting
-    Django cache work away from the Django service and double-counting it against
-    the nested OTel Redis span that already reports ``db.system="redis"``.
-    """
+def test_cache_span_sets_redis_db_system(memory_exporter):
+    """Redis cache spans must set db.system='redis' so the collector and APM dashboards identify Redis."""
+    from opentelemetry.trace import SpanKind
     from tracenest.integrations.django.cache import make_traced_cache_op
 
     class FakeRedisCache:
         __module__ = "django_redis.cache"
+        _server = "redis://127.0.0.1:6379/1"
 
         def get(self, key):
             return "v"
@@ -88,16 +87,19 @@ def test_cache_span_does_not_claim_a_db_system(memory_exporter):
     traced_get(lambda k: FakeRedisCache().get(k), FakeRedisCache(), ("k",), {})
 
     span = memory_exporter.get_finished_spans()[0]
-    assert "db.system" not in span.attributes
-    assert "db.system.name" not in span.attributes
-    assert "peer.service" not in span.attributes
-    # Still fully identifiable as a cache op without the wrong attribute.
+    assert span.kind == SpanKind.CLIENT
+    assert span.attributes["db.system"] == "redis"
+    assert span.attributes["db.operation"] == "get"
+    assert span.attributes["peer.service"] == "redis"
+    assert span.attributes["server.address"] == "127.0.0.1"
+    assert span.attributes["server.port"] == 6379
     assert span.attributes["django.cache.operation"] == "get"
     assert span.attributes["django.cache.backend"] == "FakeRedisCache"
 
 
 def test_non_redis_cache_not_misclassified(memory_exporter):
     """Verify that a non-Redis backend with 'redis' in module name (e.g. myapp.redis_helpers) is not misclassified."""
+    from opentelemetry.trace import SpanKind
     from tracenest.integrations.django.cache import make_traced_cache_op
 
     class HelperCache:
@@ -114,7 +116,10 @@ def test_non_redis_cache_not_misclassified(memory_exporter):
     spans = memory_exporter.get_finished_spans()
     assert len(spans) == 1
     assert spans[0].name == "django.cache.get"
+    assert spans[0].kind == SpanKind.INTERNAL
     assert spans[0].attributes["django.cache.backend"] == "HelperCache"
+    assert "db.system" not in spans[0].attributes
+    assert "peer.service" not in spans[0].attributes
 
 
 
@@ -183,4 +188,29 @@ def test_cache_suppresses_downstream_driver_instrumentation():
 
     assert len(instrumentation_state_during_call) == 1
     assert instrumentation_state_during_call[0] is False  # Suppressed!
+
+
+def test_cache_set_many_suppresses_pipeline_driver_instrumentation(memory_exporter):
+    """Verify that during set_many pipeline execution, downstream driver spans are suppressed."""
+    from tracenest.integrations.django.cache import make_traced_cache_op, _in_cache_span
+    from tracenest.integrations.redis.integration import _redis_suppress_guard
+
+    class DummyPipeline:
+        def execute(self):
+            return ["OK", "OK"]
+
+    called = []
+    def dummy_execute(pipe):
+        called.append(True)
+        return pipe.execute()
+
+    wrapped_execute = lambda *args, **kwargs: _redis_suppress_guard(DummyPipeline.execute, DummyPipeline(), args, kwargs)
+
+    pipe = DummyPipeline()
+    token = _in_cache_span.set(True)
+    try:
+        res = _redis_suppress_guard(pipe.execute, pipe, (), {})
+        assert res == ["OK", "OK"]
+    finally:
+        _in_cache_span.reset(token)
 

@@ -24,6 +24,12 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "requests>=2.25.0",
+    # tests/conftest.py configures Django, so the documented
+    # `pip install -e '.[dev]'` + `pytest` flow needs it here. Unpinned above
+    # 4.2 so the resolver follows the interpreter: on Python 3.8 (the
+    # sample-app / backend target) this resolves to the 4.2 LTS, while newer
+    # interpreters get the matching current release.
+    "django>=4.2",
 ]
 
 [tool.setuptools.packages.find]

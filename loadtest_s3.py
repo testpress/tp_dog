@@ -409,7 +409,7 @@ def verify_apm(args: argparse.Namespace) -> bool:
     print(f"  Waiting {FLUSH_WAIT_SECONDS:.0f}s for the collector batch + Tempo ingest...")
     time.sleep(FLUSH_WAIT_SECONDS)
 
-    if tempo_search(args.tempo, '{ name =~ "S3.*" }', limit=1) is None:
+    if tempo_search(args.tempo, '{ name =~ ".*S3.*" }', limit=1) is None:
         print(f"  {RED}✖ Could not reach Tempo at {args.tempo}{RESET}")
         print(f"    The load numbers above are still valid, but APM delivery is")
         print(f"    UNVERIFIED -- do not read this as a pass.")
@@ -434,7 +434,7 @@ def verify_apm(args: argparse.Namespace) -> bool:
         # collector's batch export, so a single query right after the load can
         # miss spans that are about to land.
         data, _ = search_with_retry(
-            args.tempo, '{ name = "' + span_name + '" }', attempts=4, delay=2.5
+            args.tempo, '{ name =~ ".*' + span_name + '" }', attempts=4, delay=2.5
         )
         if data is None:
             print(f"    {RED}{op:<8} {span_name:<20} {'query failed':>16}{RESET}")
@@ -451,7 +451,7 @@ def verify_apm(args: argparse.Namespace) -> bool:
     # Prove the boto spans are nested inside the Django request trace rather
     # than arriving as orphaned roots.
     print()
-    data = tempo_search(args.tempo, '{ name =~ "S3.*" }', limit=20)
+    data = tempo_search(args.tempo, '{ name =~ ".*S3.*" }', limit=20)
     traces = (data or {}).get("traces") or []
     nested = False
     for entry in traces[:5]:
@@ -479,13 +479,13 @@ def verify_apm(args: argparse.Namespace) -> bool:
     print(f"  {CYAN}Inspect in Grafana:{RESET}")
     print(f"    🔥 Flamegraph (TraceQL: S3 spans)")
     print(f"       {args.grafana}/explore?schemaVersion=1&panes=%7B%22p%22:%7B%22datasource%22:%22tempo%22,"
-          f"%22queries%22:%5B%7B%22query%22:%22%7Bname=~%5C%22S3.%2A%5C%22%7D%22,%22queryType%22:%22traceql%22%7D%5D%7D%7D")
+          f"%22queries%22:%5B%7B%22query%22:%22%7Bname=~%5C%22.%2AS3.%2A%5C%22%7D%22,%22queryType%22:%22traceql%22%7D%5D%7D%7D")
     print(f"    📊 Service overview  (var-service = aws-s3):")
     print(f"       {args.grafana}/d/tracenest-generic-service-overview?var-service=aws-s3")
     print(f"    📋 Operation details (shows S3.PutObject / S3.GetObject / ...):")
     print(f"       {args.grafana}/d/tracenest-generic-operation-details?var-service=aws-s3")
     print()
-    print(f"  {CYAN}Tempo raw search:{RESET} {args.tempo}/api/search?q=%7B+name=~%22S3.*%22%7D")
+    print(f"  {CYAN}Tempo raw search:{RESET} {args.tempo}/api/search?q=%7B+name=~%22.*S3.*%22%7D")
     print(f"{BOLD}{CYAN}{'=' * 70}{RESET}")
 
     return not missing and bool(confirmed)

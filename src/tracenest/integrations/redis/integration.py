@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from tracenest.config import SDKConfig
 from tracenest.integrations.base import BaseIntegration
+from tracenest.integrations.django.cache import _in_cache_span
 
 logger = logging.getLogger("tracenest.integrations.redis")
 
@@ -18,24 +19,34 @@ def _tracenest_redis_request_hook(span: Any, instance: Any, args: Any, kwargs: A
                 if hasattr(span, "update_name"):
                     span.update_name(f"🔸 {name}")
             if hasattr(span, "set_attribute"):
-                span.set_attribute("peer.service", "redis")
                 span.set_attribute("db.system", "redis")
                 span.set_attribute("db.name", "redis")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("redis hook/guard error", exc_info=True)
+
+
+def _tracenest_redis_response_hook(span: Any, instance: Any, response: Any) -> None:
+    try:
+        if span is not None and getattr(span, "is_recording", lambda: True)():
+            name = getattr(span, "name", "")
+            if name and not name.startswith("🔸"):
+                if hasattr(span, "update_name"):
+                    span.update_name(f"🔸 {name}")
+    except Exception as exc:
+        logger.debug("redis hook/guard error", exc_info=True)
 
 
 def _redis_suppress_guard(wrapped: Any, instance: Any, args: Any, kwargs: Any) -> Any:
     try:
         from opentelemetry.instrumentation.utils import is_instrumentation_enabled
 
-        if not is_instrumentation_enabled():
+        if not is_instrumentation_enabled() or _in_cache_span.get():
             orig = getattr(wrapped, "__wrapped__", wrapped)
             while hasattr(orig, "__wrapped__"):
                 orig = orig.__wrapped__
             return orig(*args, **kwargs)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("redis hook/guard error", exc_info=True)
     return wrapped(*args, **kwargs)
 
 
@@ -60,12 +71,15 @@ class RedisIntegration(BaseIntegration):
 
             instrumentor = RedisInstrumentor()
             if not instrumentor.is_instrumented_by_opentelemetry:
-                instrumentor.instrument(request_hook=_tracenest_redis_request_hook)
+                instrumentor.instrument(
+                    request_hook=_tracenest_redis_request_hook,
+                    response_hook=_tracenest_redis_response_hook,
+                )
             logger.debug("TraceNest: Official RedisInstrumentor applied successfully.")
         except Exception as exc:
             logger.debug("RedisInstrumentor patch skipped: %s", exc)
 
-        # Wrap execute_command and pipeline with suppression guard to prevent duplicate child spans
+        # Wrap execute_command and pipeline execution with suppression guard to prevent duplicate child spans
         # when called from high-level cache wrappers (compatible across all OTel versions)
         targets = [
             ("redis.client.Redis", "execute_command"),
@@ -74,6 +88,11 @@ class RedisIntegration(BaseIntegration):
             ("redis.client.StrictRedis", "pipeline"),
             ("redis.Redis", "execute_command"),
             ("redis.Redis", "pipeline"),
+            ("redis.client.Pipeline", "execute"),
+            ("redis.client.Pipeline", "immediate_execute_command"),
+            ("redis.cluster.ClusterPipeline", "execute"),
+            ("redis.asyncio.client.Pipeline", "execute"),
+            ("redis.asyncio.client.Pipeline", "immediate_execute_command"),
         ]
         for target_cls, target_method in targets:
             try:
