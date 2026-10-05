@@ -5,21 +5,12 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
-  postgresql:
-    endpoint: postgres:5432
-    transport: tcp
-    username: django
-    password: django
-    databases:
-    - django_otel
-    tls:
-      insecure: true
-    collection_interval: 10s
+
 processors:
   memory_limiter:
     check_interval: 500ms
-    limit_mib: 280
-    spike_limit_mib: 50
+    limit_mib: 512
+    spike_limit_mib: 100
   resource/drop_ephemeral:
     attributes:
     - key: service.instance.id
@@ -32,14 +23,6 @@ processors:
     send_batch_max_size: 512
   filter/noise:
     error_mode: ignore
-    traces:
-      span:
-      - name == "GET /healthz"
-      - name == "GET /readyz"
-      - name == "/healthz"
-      - name == "/readyz"
-      - attributes["http.route"] == "/healthz"
-      - attributes["http.route"] == "/readyz"
   transform/normalize:
     error_mode: ignore
     trace_statements:
@@ -87,8 +70,6 @@ connectors:
     - name: http.route
     - name: db.system
     - name: db.operation
-    - name: db.statement
-    - name: db.instance
     - name: server.address
     - name: server.port
     - name: error
@@ -96,27 +77,20 @@ connectors:
     - name: normalized.service
     - name: normalized.operation
     dimensions_cache_size: 5000
-  servicegraph:
-    latency_histogram_buckets: [2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s]
-    dimensions:
-    - project.name
-    store:
-      ttl: 2s
-      max_items: 2000
 exporters:
   otlp/tempo:
     # TEMPO_OTLP_ENDPOINT must be set in every deployment; the collector has no
     # built-in default for ${env:...} expansion. Local dev sets it to `tempo:4317`,
     # production sets it to the observability host (e.g. tempo.obs.internal:4317).
-    endpoint: ${env:TEMPO_OTLP_ENDPOINT}
+    endpoint: tempo.tracenest.orb.local:4317
     tls:
-      insecure: ${env:TEMPO_OTLP_INSECURE}
+      insecure: true
     # Wide-area link: allow the export to outlive a slow/unreachable Tempo.
     timeout: 10s
     sending_queue:
-      enabled: true
-      num_consumers: 8
-      queue_size: 5000
+        enabled: true
+        num_consumers: 4
+        queue_size: 2000
     retry_on_failure:
       enabled: true
       initial_interval: 1s
@@ -141,13 +115,10 @@ service:
       exporters:
       - otlp/tempo
       - spanmetrics
-      - servicegraph
     metrics:
       receivers:
       - otlp
       - spanmetrics
-      - servicegraph
-      - postgresql
       processors:
       - memory_limiter
       - resource/drop_ephemeral

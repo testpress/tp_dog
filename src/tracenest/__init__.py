@@ -7,7 +7,7 @@ Provides complete distributed tracing and request waterfall instrumentation for 
 import atexit
 import logging
 import threading
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -59,6 +59,8 @@ def init(
     export_batch: bool = True,
     auto_patch: bool = True,
     extract_trace_context: Optional[Any] = None,
+    ignore_endpoints: Optional[List[str]] = None,
+    endpoint_sample_rules: Optional[Dict[str, float]] = None,
     **kwargs: Any,
 ) -> TracerProvider:
     """
@@ -104,6 +106,8 @@ def init(
             integrations=integrations,
             auto_patch=auto_patch,
             extract_trace_context=extract_trace_context,
+            ignore_endpoints=ignore_endpoints,
+            endpoint_sample_rules=endpoint_sample_rules,
             **kwargs,
         )
         _ACTIVE_CONFIG = config

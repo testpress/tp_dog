@@ -12,6 +12,8 @@ from opentelemetry.sdk.trace.sampling import (
 )
 from opentelemetry.trace import Link, SpanKind, TraceFlags
 
+from tracenest.config import _parse_endpoint_sample_rules, _parse_rate
+
 
 class TraceNestRuleBasedSampler(Sampler):
     """
@@ -27,14 +29,17 @@ class TraceNestRuleBasedSampler(Sampler):
         ignore_endpoints: Optional[List[str]] = None,
         endpoint_sample_rules: Optional[Dict[str, float]] = None,
     ):
-        self.global_sample_rate = max(0.0, min(1.0, float(global_sample_rate)))
-        self.ignore_endpoints = list(ignore_endpoints or [])
-        self.endpoint_sample_rules = dict(endpoint_sample_rules or {})
+        self.global_sample_rate = _parse_rate(global_sample_rate, "global_sample_rate")
+        if isinstance(ignore_endpoints, str):
+            self.ignore_endpoints = [p.strip() for p in ignore_endpoints.split(",") if p.strip()]
+        else:
+            self.ignore_endpoints = [p.strip() for p in (ignore_endpoints or []) if isinstance(p, str) and p.strip()]
+        self.endpoint_sample_rules = _parse_endpoint_sample_rules(endpoint_sample_rules)
 
         # Pre-instantiate ratio samplers for fast lookup
         self._global_ratio_sampler = TraceIdRatioBased(self.global_sample_rate)
         self._rule_ratio_samplers: Dict[str, TraceIdRatioBased] = {
-            pattern: TraceIdRatioBased(max(0.0, min(1.0, float(rate))))
+            pattern: TraceIdRatioBased(rate)
             for pattern, rate in self.endpoint_sample_rules.items()
         }
 

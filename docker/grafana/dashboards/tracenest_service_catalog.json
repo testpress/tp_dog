@@ -19,6 +19,16 @@
     },
     {
       "asDropdown": false,
+      "icon": "heartbeat",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Collector Health",
+      "type": "link",
+      "url": "/d/tracenest-otel-collector-health"
+    },
+    {
+      "asDropdown": false,
       "icon": "dashboard",
       "includeVars": true,
       "keepTime": true,

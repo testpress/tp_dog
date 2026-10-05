@@ -128,3 +128,106 @@ def test_parameterized_route_template_matching():
         },
     )
     assert res3.decision == Decision.DROP
+
+
+@pytest.mark.parametrize(
+    "malformed_rule",
+    [
+        "/api/checkout/*",            # Missing '='
+        "=/api/checkout/*",           # Empty pattern
+        "/api/checkout/*=",           # Empty rate
+        "/api/checkout/*=abc",         # Non-numeric rate
+        "/api/checkout/*=1.5",         # Rate > 1.0
+        "/api/checkout/*=-0.1",        # Rate < 0.0
+        "/api/checkout/*=nan",         # Non-finite rate
+        "/api/checkout/*=inf",         # Non-finite rate
+    ],
+)
+def test_endpoint_sample_rules_validation_env_var(monkeypatch, malformed_rule):
+    """Verify malformed TRACENEST_ENDPOINT_SAMPLE_RULES raises ValueError with descriptive message."""
+    monkeypatch.setenv("TRACENEST_ENDPOINT_SAMPLE_RULES", malformed_rule)
+    with pytest.raises(ValueError, match="TraceNest:"):
+        SDKConfig.from_env_and_kwargs()
+
+
+@pytest.mark.parametrize(
+    "invalid_rules",
+    [
+        {"/api/checkout/*": 1.5},      # Rate > 1.0
+        {"/api/checkout/*": -0.5},     # Rate < 0.0
+        {"/api/checkout/*": "notnum"},  # Non-numeric
+        {"/api/checkout/*": float("nan")},  # NaN
+        {"": 0.5},                     # Empty pattern string
+        {"   ": 0.5},                  # Blank pattern string
+        {123: 0.5},                    # Non-string pattern
+        [("/api/*", 0.5)],             # Invalid type (list instead of dict/str)
+    ],
+)
+def test_endpoint_sample_rules_validation_kwargs(invalid_rules):
+    """Verify invalid endpoint_sample_rules kwargs raise ValueError."""
+    with pytest.raises(ValueError, match="TraceNest:"):
+        SDKConfig.from_env_and_kwargs(endpoint_sample_rules=invalid_rules)
+
+
+def test_endpoint_sample_rules_sampler_direct_validation():
+    """Verify TraceNestRuleBasedSampler validates global rate and per-route rules directly."""
+    # Out of range global sample rate
+    with pytest.raises(ValueError, match="global_sample_rate"):
+        TraceNestRuleBasedSampler(global_sample_rate=1.5)
+
+    with pytest.raises(ValueError, match="global_sample_rate"):
+        TraceNestRuleBasedSampler(global_sample_rate=-0.1)
+
+    # Invalid rule in sampler
+    with pytest.raises(ValueError, match="endpoint_sample_rules"):
+        TraceNestRuleBasedSampler(endpoint_sample_rules={"/api/*": 2.0})
+
+    with pytest.raises(ValueError, match="endpoint_sample_rules"):
+        TraceNestRuleBasedSampler(endpoint_sample_rules={"/api/*": "invalid"})
+
+
+def test_ignore_endpoints_string_kwarg_and_formatting():
+    """Verify comma-separated string for ignore_endpoints is parsed into separate items."""
+    cfg = SDKConfig.from_env_and_kwargs(ignore_endpoints="/health,/metrics, /readyz ")
+    assert cfg.ignore_endpoints == ["/health", "/metrics", "/readyz"]
+
+    # Sampler also accepts comma-separated string
+    sampler = TraceNestRuleBasedSampler(ignore_endpoints="/health, /status")
+    assert sampler.ignore_endpoints == ["/health", "/status"]
+
+
+def test_endpoint_sample_rules_empty_dict_overrides_env_var(monkeypatch):
+    """Verify passing endpoint_sample_rules={} explicitly overrides rules in environment."""
+    monkeypatch.setenv("TRACENEST_ENDPOINT_SAMPLE_RULES", "/api/checkout/*=1.0,/search/*=0.5")
+    cfg = SDKConfig.from_env_and_kwargs(endpoint_sample_rules={})
+    assert cfg.endpoint_sample_rules == {}
+
+
+def test_tracenest_init_validation_of_endpoint_sample_rules():
+    """Verify passing valid and invalid endpoint_sample_rules to tracenest.init()."""
+    import tracenest
+
+    tracenest._reset_for_testing()
+    try:
+        # Invalid SDK-prop values raise ValueError before sampler is created
+        with pytest.raises(ValueError, match="TraceNest: endpoint_sample_rules"):
+            tracenest.init(
+                project_name="testpress",
+                endpoint_sample_rules={"/health": 2.5},
+            )
+
+        # Valid rules initialize properly
+        provider = tracenest.init(
+            project_name="testpress",
+            endpoint_sample_rules={
+                "/health": 0.0,
+                "/api/checkout/*": 1.0,
+            },
+        )
+        assert provider is not None
+        assert tracenest._ACTIVE_CONFIG.endpoint_sample_rules == {
+            "/health": 0.0,
+            "/api/checkout/*": 1.0,
+        }
+    finally:
+        tracenest._reset_for_testing()

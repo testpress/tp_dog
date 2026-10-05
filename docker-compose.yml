@@ -216,12 +216,12 @@ services:
     environment:
       - TRACENEST_PROJECT_NAME=django-lite-app
       - TRACENEST_ENVIRONMENT=production
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tp-otel-collector:4318
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-2:4318
     networks:
       - default
       - tp-observability-net
     depends_on:
-      - otel-collector
+      - otel-collector-2
 
   # ==========================================================================
   # Observability stack
@@ -250,6 +250,96 @@ services:
       - "4318:4318" # OTLP HTTP receiver (used by tracenest SDK)
       - "8888:8888" # Internal Collector metrics endpoint (heap, queues, rss)
       - "8889:8889" # Prometheus metrics exporter
+    depends_on:
+      tempo:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+      - tp-observability-net
+
+  otel-collector-2:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: tp-otel-collector-2
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    environment:
+      - GOMEMLIMIT=300MiB
+      - GOGC=80
+      - TEMPO_OTLP_ENDPOINT=${TEMPO_OTLP_ENDPOINT:-tempo:4317}
+      - TEMPO_OTLP_INSECURE=${TEMPO_OTLP_INSECURE:-true}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+    volumes:
+      - ./docker/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "14317:4317"
+      - "14318:4318"
+      - "18888:8888"
+      - "18889:8889"
+    depends_on:
+      tempo:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+      - tp-observability-net
+
+  otel-collector-3:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: tp-otel-collector-3
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    environment:
+      - GOMEMLIMIT=300MiB
+      - GOGC=80
+      - TEMPO_OTLP_ENDPOINT=${TEMPO_OTLP_ENDPOINT:-tempo:4317}
+      - TEMPO_OTLP_INSECURE=${TEMPO_OTLP_INSECURE:-true}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+    volumes:
+      - ./docker/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "24317:4317"
+      - "24318:4318"
+      - "28888:8888"
+      - "28889:8889"
+    depends_on:
+      tempo:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+      - tp-observability-net
+
+  otel-collector-4:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: tp-otel-collector-4
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    environment:
+      - GOMEMLIMIT=300MiB
+      - GOGC=80
+      - TEMPO_OTLP_ENDPOINT=${TEMPO_OTLP_ENDPOINT:-tempo:4317}
+      - TEMPO_OTLP_INSECURE=${TEMPO_OTLP_INSECURE:-true}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+    volumes:
+      - ./docker/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "34317:4317"
+      - "34318:4318"
+      - "38888:8888"
+      - "38889:8889"
     depends_on:
       tempo:
         condition: service_started

@@ -4,5 +4,11 @@
     "labels": {
       "source": "apm-spans"
     }
+  },
+  {
+    "targets": ["app-server.internal:8888"],
+    "labels": {
+      "source": "otelcol-telemetry"
+    }
   }
 ]

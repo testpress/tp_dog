@@ -43,6 +43,63 @@ def _parse_rate(val: Any, field_name: str = "sample_rate") -> float:
     return r
 
 
+def _parse_endpoint_sample_rules(val: Any) -> Dict[str, float]:
+    """Parse and validate endpoint-specific sampling rules.
+
+    Accepts:
+    - Dict[str, float]: mapping of route patterns to sampling rates in [0.0, 1.0].
+    - str: comma-separated 'pattern=rate' pairs (e.g. '/api/checkout/*=1.0,/health=0.0').
+    - None: returns empty dict.
+
+    Raises:
+    - ValueError: if any pattern is empty, rate is invalid/out-of-bounds, or format is malformed.
+    """
+    if val is None:
+        return {}
+
+    rules: Dict[str, float] = {}
+
+    if isinstance(val, str):
+        val = val.strip()
+        if not val:
+            return {}
+        items = [item.strip() for item in val.split(",") if item.strip()]
+        for item in items:
+            if "=" not in item:
+                raise ValueError(
+                    f"TraceNest: invalid endpoint sample rule {item!r}; expected format 'pattern=rate'"
+                )
+            pattern, rate_str = item.split("=", 1)
+            pattern = pattern.strip()
+            if not pattern:
+                raise ValueError(
+                    f"TraceNest: invalid endpoint sample rule {item!r}; pattern cannot be empty"
+                )
+            rate_str = rate_str.strip()
+            if not rate_str:
+                raise ValueError(
+                    f"TraceNest: invalid endpoint sample rule {item!r}; rate cannot be empty"
+                )
+            rate = _parse_rate(rate_str, field_name=f"endpoint_sample_rules[{pattern!r}]")
+            rules[pattern] = rate
+        return rules
+
+    if isinstance(val, dict):
+        for pattern, rate_val in val.items():
+            if not isinstance(pattern, str) or not pattern.strip():
+                raise ValueError(
+                    f"TraceNest: invalid endpoint pattern {pattern!r}; pattern must be a non-empty string"
+                )
+            pattern_clean = pattern.strip()
+            rate = _parse_rate(rate_val, field_name=f"endpoint_sample_rules[{pattern_clean!r}]")
+            rules[pattern_clean] = rate
+        return rules
+
+    raise ValueError(
+        f"TraceNest: endpoint_sample_rules must be a dict or comma-separated string, got {type(val).__name__}"
+    )
+
+
 def _detect_django_project_name() -> Optional[str]:
     """Try to auto-detect project name from Django settings."""
     try:
@@ -136,6 +193,8 @@ class SDKConfig:
         integrations: Optional[Dict[str, bool]] = None,
         auto_patch: Optional[bool] = None,
         extract_trace_context: Optional[Any] = None,
+        ignore_endpoints: Optional[List[str]] = None,
+        endpoint_sample_rules: Optional[Dict[str, float]] = None,
         **extra: Any,
     ) -> "SDKConfig":
         """Build SDKConfig by prioritizing explicit kwargs over environment variables."""
@@ -314,36 +373,54 @@ class SDKConfig:
         resolved_on_request_span = extra.get("on_request_span")
 
         # 13. Endpoint sampling rules & ignores
-        kwarg_ignores = extra.get("ignore_endpoints") or extra.get("IGNORE_ENDPOINTS")
+        kwarg_ignores = None
+        for candidate in (
+            ignore_endpoints,
+            extra.get("ignore_endpoints"),
+            extra.get("IGNORE_ENDPOINTS"),
+        ):
+            if candidate is not None:
+                kwarg_ignores = candidate
+                break
+
         if kwarg_ignores is not None:
-            resolved_ignores = list(kwarg_ignores)
+            if isinstance(kwarg_ignores, str):
+                resolved_ignores = [p.strip() for p in kwarg_ignores.split(",") if p.strip()]
+            else:
+                resolved_ignores = list(kwarg_ignores)
         elif "TRACENEST_IGNORE_ENDPOINTS" in os.environ:
             resolved_ignores = [p.strip() for p in os.environ["TRACENEST_IGNORE_ENDPOINTS"].split(",") if p.strip()]
         else:
             resolved_ignores = []
 
-        kwarg_rules = (
-            extra.get("endpoint_sample_rules")
-            or extra.get("endpoint_rules")
-            or extra.get("sample_rules")
-            or extra.get("ENDPOINT_SAMPLE_RULES")
-        )
+        kwarg_rules = None
+        for candidate in (
+            endpoint_sample_rules,
+            extra.get("endpoint_sample_rules"),
+            extra.get("endpoint_rules"),
+            extra.get("sample_rules"),
+            extra.get("ENDPOINT_SAMPLE_RULES"),
+        ):
+            if candidate is not None:
+                kwarg_rules = candidate
+                break
+
         if kwarg_rules is not None:
-            resolved_rules = dict(kwarg_rules)
+            resolved_rules = _parse_endpoint_sample_rules(kwarg_rules)
         elif "TRACENEST_ENDPOINT_SAMPLE_RULES" in os.environ:
-            resolved_rules = {}
-            for item in os.environ["TRACENEST_ENDPOINT_SAMPLE_RULES"].split(","):
-                item = item.strip()
-                if "=" in item:
-                    p, r = item.split("=", 1)
-                    try:
-                        resolved_rules[p.strip()] = float(r.strip())
-                    except ValueError:
-                        pass
+            resolved_rules = _parse_endpoint_sample_rules(os.environ["TRACENEST_ENDPOINT_SAMPLE_RULES"])
         else:
             resolved_rules = {}
 
-        kwarg_proxies = extra.get("trusted_proxies") or extra.get("TRUSTED_PROXIES")
+        kwarg_proxies = None
+        for candidate in (
+            extra.get("trusted_proxies"),
+            extra.get("TRUSTED_PROXIES"),
+        ):
+            if candidate is not None:
+                kwarg_proxies = candidate
+                break
+
         if kwarg_proxies is not None:
             if isinstance(kwarg_proxies, str):
                 resolved_trusted_proxies = [p.strip() for p in kwarg_proxies.split(",") if p.strip()]
@@ -354,7 +431,15 @@ class SDKConfig:
         else:
             resolved_trusted_proxies = []
 
-        kwarg_db_role_map = extra.get("db_role_map") or extra.get("DB_ROLE_MAP")
+        kwarg_db_role_map = None
+        for candidate in (
+            extra.get("db_role_map"),
+            extra.get("DB_ROLE_MAP"),
+        ):
+            if candidate is not None:
+                kwarg_db_role_map = candidate
+                break
+
         if kwarg_db_role_map is not None:
             resolved_db_role_map = dict(kwarg_db_role_map)
         elif "TRACENEST_DB_ROLE_MAP" in os.environ:
