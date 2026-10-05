@@ -1,0 +1,20 @@
+[
+  {
+    "targets": [
+      "<APP_SERVER_HOST>:8889"
+    ],
+    "labels": {
+      "source": "apm-spans",
+      "env": "production"
+    }
+  },
+  {
+    "targets": [
+      "<APP_SERVER_HOST>:8888"
+    ],
+    "labels": {
+      "source": "otelcol-telemetry",
+      "env": "production"
+    }
+  }
+]
