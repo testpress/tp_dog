@@ -621,7 +621,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", instance=~\"$instance\"}[$__rate_interval])) or (0 * otelcol_process_uptime{instance=~\"$instance\"})",
+          "expr": "sum by (instance) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", instance=~\"$instance\"}[$__rate_interval])) or (0 * sum by (instance) (otelcol_process_uptime{instance=~\"$instance\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -634,7 +634,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", instance=~\"$instance\"}[$__rate_interval])) or (0 * otelcol_process_uptime{instance=~\"$instance\"})",
+          "expr": "sum by (instance) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", instance=~\"$instance\"}[$__rate_interval])) or (0 * sum by (instance) (otelcol_process_uptime{instance=~\"$instance\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -647,7 +647,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", instance=~\"$instance\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", instance=~\"$instance\"}) * 100 or (0 * otelcol_process_uptime{instance=~\"$instance\"})",
+          "expr": "sum by (instance) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", instance=~\"$instance\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", instance=~\"$instance\"}) * 100) or (0 * sum by (instance) (otelcol_process_uptime{instance=~\"$instance\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
