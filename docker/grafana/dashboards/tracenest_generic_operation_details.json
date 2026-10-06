@@ -203,7 +203,7 @@
   "timezone": "browser",
   "title": "Generic Operation Details",
   "uid": "generic-operation-details",
-  "version": 1011,
+  "version": 1012,
   "panels": [
     {
       "collapsed": false,
@@ -879,7 +879,7 @@
             "uid": "tempo"
           },
           "limit": 30,
-          "query": "{ span.normalized.service =~ `(?i)${service:regex}` && span.normalized.operation = `${operation:raw}` }",
+          "query": "{ span.normalized.service =~ `(?i)${service:regex}` && span.normalized.operation = `${operation:raw}` && (kind = server || kind = client || parent = nil) }",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"

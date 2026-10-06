@@ -98,7 +98,7 @@ class RouteEnrichingSpanProcessor(SpanProcessor):
             existing = getattr(span, "attributes", None) or {}
             if not existing.get("http.route"):
                 route = get_current_route()
-                if route:
+                if route and route != "__unmatched__":
                     span.set_attribute("http.route", route)
             method = get_current_method()
             if method:

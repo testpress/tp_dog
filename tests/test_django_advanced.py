@@ -851,6 +851,40 @@ def test_drf_view_dispatch_reentrancy_single_span():
     assert len(dispatch_spans) == 1, f"Expected exactly 1 dispatch span, got {[s.name for s in dispatch_spans]}"
 
 
+def test_unmatched_route_does_not_poison_child_spans():
+    """Verify that unresolvable routes never publish __unmatched__ to current_route or child spans."""
+    from tracenest.route_context import get_current_route
+    from tracenest.integrations.django.request import traced_get_response
+
+    exporter = InMemorySpanExporter()
+    tracenest.init(project_name="unmatched-poison-test", exporter=exporter, export_batch=False)
+
+    factory = RequestFactory()
+    req = factory.get("/non-existent/random/path/")
+
+    observed_routes = []
+
+    def dummy_handler(request):
+        # In-flight child span check
+        observed_routes.append(get_current_route())
+        with tracenest.traced_span("child.db.query"):
+            pass
+        return HttpResponse("not found", status=404)
+
+    response = traced_get_response(dummy_handler, None, (req,), {})
+    assert response.status_code == 404
+
+    # Current route in flight must NOT have been "__unmatched__"
+    assert observed_routes == [None], f"Expected None in flight, got {observed_routes}"
+
+    spans = exporter.get_finished_spans()
+    child_span = next(s for s in spans if s.name == "child.db.query")
+    assert child_span.attributes.get("http.route") is None, (
+        f"Child span should not inherit __unmatched__, got {child_span.attributes.get('http.route')}"
+    )
+
+
+
 
 
 

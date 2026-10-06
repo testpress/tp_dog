@@ -79,7 +79,15 @@ def traced_get_response(wrapped: Callable, instance: Any, args: Any, kwargs: Any
         if pre_route and pre_route != "__unmatched__":
             set_request_route(pre_route, method)
 
-        response = wrapped(*args, **kwargs)
+        try:
+            response = wrapped(*args, **kwargs)
+        except Exception:
+            norm_route = attempt(
+                _normalize_route, request, initial_route, default=initial_route, _label="normalize_route"
+            )
+            if norm_route and norm_route != "__unmatched__":
+                safe_set_attribute(span, "http.route", norm_route)
+            raise
         # Post-application enrichment must never alter the result. Each step
         # degrades independently so a failure here cannot affect what the
         # application returned.

@@ -12,8 +12,8 @@ from opentelemetry.propagate import extract
 from tracenest.config import SDKConfig
 from tracenest.safety import attempt, safe_enrich, safe_record_exception, safe_set_attribute, safe_set_status
 from tracenest.sanitize import sanitize_url
+from tracenest.route_context import get_current_route, reset_request_route, set_request_route
 from tracenest.tracing import reentrant_guard
-from tracenest.route_context import reset_request_route, set_request_route
 import tracenest
 
 logger = logging.getLogger("tracenest.integrations.django")
@@ -387,16 +387,22 @@ def traced_get_response(wrapped, instance, args, kwargs):
         preresolved_route = _preresolve_route(
             resolve_path, getattr(request, "urlconf", None), request=request
         )
-        if preresolved_route:
+        if preresolved_route and preresolved_route != "__unmatched__":
             span_attrs["http.route"] = preresolved_route
 
         start = time.monotonic()
 
         # Publish the pre-resolved route so child spans started inside the
         # handler carry http.route even though resolver_match is only
-        # populated after the handler returns.
-        route_token = set_request_route(preresolved_route, method)
-        start_span_name = f"{method} {preresolved_route}" if preresolved_route else f"{method} {path}"
+        # populated after the handler returns. Never publish __unmatched__
+        # as it would poison child spans.
+        route_to_publish = preresolved_route if (preresolved_route and preresolved_route != "__unmatched__") else None
+        route_token = set_request_route(route_to_publish, method)
+        start_span_name = (
+            f"{method} {preresolved_route}"
+            if (preresolved_route and preresolved_route != "__unmatched__")
+            else f"{method} {path}"
+        )
         try:
             with tracer.start_as_current_span(
                 start_span_name,
@@ -428,6 +434,12 @@ def traced_get_response(wrapped, instance, args, kwargs):
                     route_for_metrics = attempt(
                         _normalize_route, request, path, default="__unmatched__", _label="normalize_route"
                     )
+                    if not route_for_metrics or route_for_metrics == "__unmatched__":
+                        current_ctx_route = get_current_route()
+                        if current_ctx_route and current_ctx_route != "__unmatched__":
+                            route_for_metrics = current_ctx_route
+                        elif preresolved_route and preresolved_route != "__unmatched__":
+                            route_for_metrics = preresolved_route
                     attempt(span.update_name, f"{method} {route_for_metrics}", _label="update_span_name")
                     safe_set_attribute(span, "http.route", route_for_metrics)
                     safe_set_attribute(span, "http.response.status_code", 500)
@@ -444,6 +456,12 @@ def traced_get_response(wrapped, instance, args, kwargs):
                     norm_route = attempt(
                         _normalize_route, request, path, default="__unmatched__", _label="normalize_route"
                     )
+                    if not norm_route or norm_route == "__unmatched__":
+                        current_ctx_route = get_current_route()
+                        if current_ctx_route and current_ctx_route != "__unmatched__":
+                            norm_route = current_ctx_route
+                        elif preresolved_route and preresolved_route != "__unmatched__":
+                            norm_route = preresolved_route
                     route_for_metrics = norm_route
                     attempt(span.update_name, f"{method} {norm_route}", _label="update_span_name")
                     view_name = attempt(
