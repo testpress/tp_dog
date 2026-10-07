@@ -581,7 +581,11 @@ def test_unmatched_route_normalization():
 
     spans = exporter.get_finished_spans()
     req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
-    assert req_span.attributes["http.route"] == "__unmatched__"
+    assert req_span.name == "GET 404"
+    assert req_span.attributes["resource.name"] == "GET 404"
+    assert req_span.attributes["http.route"] == "404"
+    assert req_span.attributes["normalized.service"] == "django"
+    assert req_span.attributes["normalized.operation"] == "GET 404"
     assert req_span.attributes["url.path"] == "/scanners/probe"
 
 

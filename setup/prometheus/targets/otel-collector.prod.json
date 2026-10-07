@@ -1,20 +1,40 @@
 [
   {
     "targets": [
-      "<APP_SERVER_HOST>:8889"
+      "192.168.139.21:8889"
     ],
     "labels": {
       "source": "apm-spans",
-      "env": "production"
+      "env": "staging"
     }
   },
   {
     "targets": [
-      "<APP_SERVER_HOST>:8888"
+      "192.168.139.21:8888"
     ],
     "labels": {
       "source": "otelcol-telemetry",
-      "env": "production"
+      "collector_alias": "app-server-01",
+      "env": "staging"
+    }
+  },
+  {
+    "targets": [
+      "192.168.139.115:8889"
+    ],
+    "labels": {
+      "source": "apm-spans",
+      "env": "testing"
+    }
+  },
+  {
+    "targets": [
+      "192.168.139.115:8888"
+    ],
+    "labels": {
+      "source": "otelcol-telemetry",
+      "collector_alias": "app-server-115",
+      "env": "testing"
     }
   }
 ]

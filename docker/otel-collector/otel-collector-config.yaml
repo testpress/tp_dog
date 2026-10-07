@@ -21,33 +21,6 @@ processors:
     timeout: 500ms
     send_batch_size: 256
     send_batch_max_size: 512
-  filter/noise:
-    error_mode: ignore
-  transform/normalize:
-    error_mode: ignore
-    trace_statements:
-    - context: span
-      statements:
-      - set(attributes["normalized.service"], "pgbouncer") where attributes["server.address"] == "pgbouncer" or attributes["server.port"] == 6432 or attributes["server.port"] == "6432" or attributes["db.connection.pool"] == "pgbouncer"
-      - set(attributes["normalized.service"], "redis") where attributes["db.system"] == "redis"
-      - set(attributes["normalized.service"], "postgres") where attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres"
-      - delete_key(attributes, "peer.service") where (attributes["db.system"] == "postgresql" or attributes["db.system"] == "postgres" or attributes["db.system"] == "redis")
-      - set(attributes["db.name"], "redis") where attributes["db.system"] == "redis"
-      - set(attributes["normalized.service"], "aws-s3") where attributes["rpc.system"] == "aws-api"
-      - set(attributes["normalized.service"], attributes["peer.service"]) where attributes["normalized.service"] == nil and attributes["peer.service"] != nil
-      - set(attributes["normalized.service"], attributes["messaging.system"]) where attributes["normalized.service"] == nil and attributes["messaging.system"] != nil
-      - set(attributes["normalized.service"], attributes["rpc.system"]) where attributes["normalized.service"] == nil and attributes["rpc.system"] != nil
-      - set(attributes["normalized.service"], attributes["db.system"]) where attributes["normalized.service"] == nil and attributes["db.system"] != nil
-      - set(attributes["normalized.service"], attributes["component"]) where attributes["normalized.service"] == nil and attributes["component"] != nil and attributes["component"] != "django"
-      - set(attributes["normalized.service"], "django") where attributes["normalized.service"] == nil
-      - set(attributes["normalized.service"], "postgres") where attributes["normalized.service"] == "postgresql"
-      - set(attributes["normalized.service"], "aws-s3") where attributes["normalized.service"] == "aws-api"
-      - set(attributes["normalized.operation"], Concat([attributes["rpc.service"], attributes["rpc.method"]], ".")) where attributes["rpc.service"] != nil and attributes["rpc.method"] != nil
-      - set(attributes["normalized.operation"], attributes["rpc.method"]) where attributes["normalized.operation"] == nil and attributes["rpc.method"] != nil
-      - set(attributes["normalized.operation"], attributes["db.statement"]) where attributes["normalized.operation"] == nil and attributes["db.statement"] != nil
-      - set(attributes["normalized.operation"], Concat([attributes["http.method"], attributes["http.route"]], " ")) where attributes["normalized.operation"] == nil and attributes["http.route"] != nil and attributes["span.type"] == "web"
-      - set(attributes["normalized.operation"], Concat([attributes["http.method"], attributes["http.route"]], " ")) where attributes["normalized.operation"] == nil and attributes["http.route"] != nil and attributes["component"] == "django"
-      - set(attributes["normalized.operation"], name) where attributes["normalized.operation"] == nil
 connectors:
   spanmetrics:
     histogram:
@@ -108,9 +81,7 @@ service:
       - otlp
       processors:
       - memory_limiter
-      - filter/noise
       - resource/drop_ephemeral
-      - transform/normalize
       - batch
       exporters:
       - otlp/tempo

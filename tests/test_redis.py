@@ -68,7 +68,7 @@ def test_django_redis_cache_tracing(memory_exporter):
     assert span.attributes["django.cache.hit"] is True
     assert span.attributes["db.system"] == "redis"
     assert span.attributes["db.operation"] == "get"
-    assert span.attributes["peer.service"] == "redis"
+    assert "peer.service" not in span.attributes
 
 
 def test_cache_span_sets_redis_db_system(memory_exporter):
@@ -90,7 +90,7 @@ def test_cache_span_sets_redis_db_system(memory_exporter):
     assert span.kind == SpanKind.CLIENT
     assert span.attributes["db.system"] == "redis"
     assert span.attributes["db.operation"] == "get"
-    assert span.attributes["peer.service"] == "redis"
+    assert "peer.service" not in span.attributes
     assert span.attributes["server.address"] == "127.0.0.1"
     assert span.attributes["server.port"] == 6379
     assert span.attributes["django.cache.operation"] == "get"
@@ -167,6 +167,9 @@ def test_redis_request_hook_prefixes_command_span():
 
     _tracenest_redis_request_hook(mock_span, None, ("GET", "key"), {})
     mock_span.update_name.assert_called_once_with("🔸 GET")
+    set_attrs = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+    assert set_attrs.get("db.system") == "redis"
+    assert "peer.service" not in set_attrs
 
 
 def test_cache_suppresses_downstream_driver_instrumentation():

@@ -440,8 +440,17 @@ def traced_get_response(wrapped, instance, args, kwargs):
                             route_for_metrics = current_ctx_route
                         elif preresolved_route and preresolved_route != "__unmatched__":
                             route_for_metrics = preresolved_route
-                    attempt(span.update_name, f"{method} {route_for_metrics}", _label="update_span_name")
-                    safe_set_attribute(span, "http.route", route_for_metrics)
+                    final_span_name = (
+                        f"{method} {status_code}"
+                        if (not route_for_metrics or route_for_metrics == "__unmatched__")
+                        else f"{method} {route_for_metrics}"
+                    )
+                    final_route = str(status_code) if (not route_for_metrics or route_for_metrics == "__unmatched__") else route_for_metrics
+                    attempt(span.update_name, final_span_name, _label="update_span_name")
+                    safe_set_attribute(span, "http.route", final_route)
+                    safe_set_attribute(span, "resource.name", final_span_name)
+                    safe_set_attribute(span, "normalized.service", "django")
+                    safe_set_attribute(span, "normalized.operation", final_span_name)
                     safe_set_attribute(span, "http.response.status_code", 500)
                     safe_set_attribute(span, "http.status_code", 500)
                     safe_set_attribute(span, "error", True)
@@ -463,17 +472,25 @@ def traced_get_response(wrapped, instance, args, kwargs):
                         elif preresolved_route and preresolved_route != "__unmatched__":
                             norm_route = preresolved_route
                     route_for_metrics = norm_route
-                    attempt(span.update_name, f"{method} {norm_route}", _label="update_span_name")
+                    final_span_name = (
+                        f"{method} {status_code}"
+                        if (not norm_route or norm_route == "__unmatched__")
+                        else f"{method} {norm_route}"
+                    )
+                    final_route = str(status_code) if (not norm_route or norm_route == "__unmatched__") else norm_route
+                    attempt(span.update_name, final_span_name, _label="update_span_name")
                     view_name = attempt(
                         _resolve_view_name, request, method, default="view", _label="view_name"
                     )
 
-                    safe_set_attribute(span, "http.route", norm_route)
+                    safe_set_attribute(span, "http.route", final_route)
                     safe_set_attribute(span, "http.response.status_code", status_code)
                     safe_set_attribute(span, "http.status_code", status_code)
                     safe_set_attribute(span, "django.view", str(view_name))
                     safe_set_attribute(span, "django.view.name", str(view_name))
-                    safe_set_attribute(span, "resource.name", f"{method} {norm_route}")
+                    safe_set_attribute(span, "resource.name", final_span_name)
+                    safe_set_attribute(span, "normalized.service", "django")
+                    safe_set_attribute(span, "normalized.operation", final_span_name)
 
                     def _set_phrase() -> None:
                         import http

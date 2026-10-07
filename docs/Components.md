@@ -74,7 +74,7 @@ Instruments Redis client commands and Django cache operations.
 | :--- | :--- | :--- | :--- |
 | **`🔸 <COMMAND>`** (e.g. `🔸 GET`, `🔸 SET`) | `CLIENT` | Direct low-level Redis client commands via `RedisInstrumentor` with custom hook | `db.system="redis"`, `db.operation`, `db.statement`, `net.peer.name` |
 | **`🔸 PIPELINE`** | `CLIENT` | Redis batch pipeline execution | `db.system="redis"`, `db.operation="PIPELINE"` |
-| **`🔴 django_redis.cache.<op>`** | `INTERNAL` | Django cache operations (`get`, `set`, `delete_many`, etc.) | `django.cache.operation`, `django.cache.backend`, `django.cache.key`, `django.cache.hit` |
+| **`🔸 django_redis.cache.<op>`** | `CLIENT` | Django cache operations (`get`, `set`, `delete_many`, etc.) | `django.cache.operation`, `django.cache.backend`, `django.cache.key`, `django.cache.hit` |
 
 ### Key Features
 - **Sensitive Command Redaction**: Arguments for commands like `AUTH`, `CONFIG`, and `PASSWORD` are scrubbed. *This behaviour is inherited from the upstream `opentelemetry-instrumentation-redis` package — TraceNest registers no Redis hooks of its own, so the guarantees (and gaps) are that package's and move with its version.*

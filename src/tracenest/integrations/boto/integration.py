@@ -18,6 +18,10 @@ def _tracenest_boto_request_hook(span: Any, service: str, operation: str, params
             if name and not name.startswith("🪣") and not name.startswith("☁️"):
                 if hasattr(span, "update_name"):
                     span.update_name(f"{icon} {name}")
+            if hasattr(span, "set_attribute"):
+                norm_svc = "aws-s3" if str(service).lower() == "s3" else f"aws-{str(service).lower()}"
+                span.set_attribute("normalized.service", norm_svc)
+                span.set_attribute("normalized.operation", f"{service}.{operation}" if service and operation else (name or "aws.call"))
     except Exception as exc:
         logger.debug("boto hook error", exc_info=True)
 

@@ -206,6 +206,8 @@ def _build_db_span_context(
         "db.operation.name": op,
         "db.role": db_role,
         "resource.name": metric_sql,
+        "normalized.service": "pgbouncer" if is_pgbouncer else "postgres",
+        "normalized.operation": metric_sql or "postgres.query",
     }
     if is_pgbouncer:
         span_attrs["db.connection.pool"] = "pgbouncer"

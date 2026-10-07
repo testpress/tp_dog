@@ -110,7 +110,40 @@ class RouteEnrichingSpanProcessor(SpanProcessor):
             pass
 
     def on_end(self, span: ReadableSpan) -> None:
-        return None
+        try:
+            attrs = getattr(span, "attributes", None) or {}
+            # Fallback for normalized.service if not set
+            if not attrs.get("normalized.service"):
+                svc = (
+                    attrs.get("peer.service")
+                    or attrs.get("db.system")
+                    or attrs.get("rpc.system")
+                    or attrs.get("component")
+                )
+                if svc == "postgresql":
+                    svc = "postgres"
+                elif svc == "aws-api":
+                    svc = "aws-s3"
+                if not svc:
+                    svc = "django"
+                if hasattr(span, "set_attribute"):
+                    span.set_attribute("normalized.service", str(svc))
+
+            # Fallback for normalized.operation if not set
+            if not attrs.get("normalized.operation"):
+                op = None
+                if attrs.get("http.method") and attrs.get("http.route"):
+                    op = f"{attrs.get('http.method')} {attrs.get('http.route')}"
+                elif attrs.get("db.statement"):
+                    op = attrs.get("db.statement")
+                elif attrs.get("rpc.service") and attrs.get("rpc.method"):
+                    op = f"{attrs.get('rpc.service')}.{attrs.get('rpc.method')}"
+                else:
+                    op = getattr(span, "name", "")
+                if op and hasattr(span, "set_attribute"):
+                    span.set_attribute("normalized.operation", str(op))
+        except Exception:
+            pass
 
     def shutdown(self) -> None:
         return None

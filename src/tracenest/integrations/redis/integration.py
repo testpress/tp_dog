@@ -15,25 +15,21 @@ def _tracenest_redis_request_hook(span: Any, instance: Any, args: Any, kwargs: A
     try:
         if span is not None and getattr(span, "is_recording", lambda: True)():
             name = getattr(span, "name", "")
-            if name and not name.startswith("🔸") and not name.startswith("REDIS:") and not name.startswith("redis:"):
-                if hasattr(span, "update_name"):
-                    span.update_name(f"🔸 {name}")
+            raw_op = name.replace("🔸", "").replace("REDIS:", "").replace("redis:", "").strip() if name else "command"
+            display_name = f"🔸 {raw_op.upper()}" if raw_op else "🔸 COMMAND"
+            if hasattr(span, "update_name"):
+                span.update_name(display_name)
             if hasattr(span, "set_attribute"):
                 span.set_attribute("db.system", "redis")
                 span.set_attribute("db.name", "redis")
+                span.set_attribute("normalized.service", "redis")
+                span.set_attribute("normalized.operation", f"redis.{raw_op.lower()}" if raw_op else "redis.command")
     except Exception as exc:
         logger.debug("redis hook/guard error", exc_info=True)
 
 
 def _tracenest_redis_response_hook(span: Any, instance: Any, response: Any) -> None:
-    try:
-        if span is not None and getattr(span, "is_recording", lambda: True)():
-            name = getattr(span, "name", "")
-            if name and not name.startswith("🔸"):
-                if hasattr(span, "update_name"):
-                    span.update_name(f"🔸 {name}")
-    except Exception as exc:
-        logger.debug("redis hook/guard error", exc_info=True)
+    pass
 
 
 def _redis_suppress_guard(wrapped: Any, instance: Any, args: Any, kwargs: Any) -> Any:

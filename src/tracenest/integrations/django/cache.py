@@ -104,7 +104,8 @@ def make_traced_cache_op(op_name: str):
             span_attrs["db.system"] = "redis"
             span_attrs["db.operation"] = op_name
             span_attrs["db.name"] = "redis"
-            span_attrs["peer.service"] = "redis"
+            span_attrs["normalized.service"] = "redis"
+            span_attrs["normalized.operation"] = f"redis.{op_name}"
             server_addr, server_port = _extract_redis_server_info(instance)
             if server_addr:
                 span_attrs["server.address"] = server_addr

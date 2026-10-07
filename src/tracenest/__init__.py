@@ -29,6 +29,7 @@ from tracenest.exporter import SafeSpanExporter
 from tracenest.route_context import RouteEnrichingSpanProcessor
 from tracenest.integrations import BaseIntegration, get_integration_manager
 from tracenest.sanitize import sanitize_query_string, sanitize_sql, sanitize_url
+from tracenest.tracing import traced_span
 from tracenest.version import __version__
 
 logger = logging.getLogger("tracenest")
@@ -289,6 +290,7 @@ __all__ = [
     "get_config",
     "get_tracer",
     "get_current_span",
+    "traced_span",
     "get_integration_manager",
     "BaseIntegration",
     "SDKConfig",
