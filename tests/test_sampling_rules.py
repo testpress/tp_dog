@@ -1,14 +1,14 @@
-"""Unit tests for endpoint-based and custom rule sampling in TraceNest SDK v3."""
+"""Unit tests for endpoint-based and custom rule sampling in tp_dog SDK v3."""
 
 import pytest
 from opentelemetry.sdk.trace.sampling import Decision
-from tracenest.config import SDKConfig
-from tracenest.sampler import TraceNestRuleBasedSampler, create_tracenest_sampler
+from tp_dog.config import SDKConfig
+from tp_dog.sampler import TpDogRuleBasedSampler, create_tp_dog_sampler
 
 
 def test_ignore_endpoints_wildcard_matching():
     """Verify ignore_endpoints drops spans matching exact or wildcard path patterns."""
-    sampler = TraceNestRuleBasedSampler(
+    sampler = TpDogRuleBasedSampler(
         global_sample_rate=1.0,
         ignore_endpoints=["/health*", "*/static/*", "/api/products/health/"],
     )
@@ -33,7 +33,7 @@ def test_ignore_endpoints_wildcard_matching():
 
 def test_endpoint_sample_rules_custom_ratios():
     """Verify endpoint_sample_rules applies custom per-route sampling ratios."""
-    sampler = TraceNestRuleBasedSampler(
+    sampler = TpDogRuleBasedSampler(
         global_sample_rate=0.0,  # Drop all by default
         endpoint_sample_rules={
             "/api/checkout/*": 1.0,  # Always sample checkout
@@ -67,17 +67,17 @@ def test_config_resolves_sampling_kwargs_and_env(monkeypatch):
     assert cfg.endpoint_sample_rules == {"/api/vip/*": 1.0}
 
     # Test environment variable resolution
-    monkeypatch.setenv("TRACENEST_IGNORE_ENDPOINTS", "/health,/metrics")
-    monkeypatch.setenv("TRACENEST_ENDPOINT_SAMPLE_RULES", "/api/checkout/*=1.0,/api/search/*=0.5")
+    monkeypatch.setenv("TP_DOG_IGNORE_ENDPOINTS", "/health,/metrics")
+    monkeypatch.setenv("TP_DOG_ENDPOINT_SAMPLE_RULES", "/api/checkout/*=1.0,/api/search/*=0.5")
 
     cfg_env = SDKConfig.from_env_and_kwargs()
     assert cfg_env.ignore_endpoints == ["/health", "/metrics"]
     assert cfg_env.endpoint_sample_rules == {"/api/checkout/*": 1.0, "/api/search/*": 0.5}
 
 
-def test_create_tracenest_sampler():
-    """Verify create_tracenest_sampler returns ParentBased wrapper."""
-    sampler = create_tracenest_sampler(
+def test_create_tp_dog_sampler():
+    """Verify create_tp_dog_sampler returns ParentBased wrapper."""
+    sampler = create_tp_dog_sampler(
         global_sample_rate=1.0,
         ignore_endpoints=["/health"],
     )
@@ -86,7 +86,7 @@ def test_create_tracenest_sampler():
 
 def test_parameterized_route_template_matching():
     """Verify endpoint_sample_rules matches against http.route even when url.path is a concrete URL."""
-    sampler = TraceNestRuleBasedSampler(
+    sampler = TpDogRuleBasedSampler(
         global_sample_rate=0.0,
         endpoint_sample_rules={
             "/api/items/{id}/": 1.0,
@@ -144,9 +144,9 @@ def test_parameterized_route_template_matching():
     ],
 )
 def test_endpoint_sample_rules_validation_env_var(monkeypatch, malformed_rule):
-    """Verify malformed TRACENEST_ENDPOINT_SAMPLE_RULES raises ValueError with descriptive message."""
-    monkeypatch.setenv("TRACENEST_ENDPOINT_SAMPLE_RULES", malformed_rule)
-    with pytest.raises(ValueError, match="TraceNest:"):
+    """Verify malformed TP_DOG_ENDPOINT_SAMPLE_RULES raises ValueError with descriptive message."""
+    monkeypatch.setenv("TP_DOG_ENDPOINT_SAMPLE_RULES", malformed_rule)
+    with pytest.raises(ValueError, match="tp_dog:"):
         SDKConfig.from_env_and_kwargs()
 
 
@@ -165,25 +165,25 @@ def test_endpoint_sample_rules_validation_env_var(monkeypatch, malformed_rule):
 )
 def test_endpoint_sample_rules_validation_kwargs(invalid_rules):
     """Verify invalid endpoint_sample_rules kwargs raise ValueError."""
-    with pytest.raises(ValueError, match="TraceNest:"):
+    with pytest.raises(ValueError, match="tp_dog:"):
         SDKConfig.from_env_and_kwargs(endpoint_sample_rules=invalid_rules)
 
 
 def test_endpoint_sample_rules_sampler_direct_validation():
-    """Verify TraceNestRuleBasedSampler validates global rate and per-route rules directly."""
+    """Verify TpDogRuleBasedSampler validates global rate and per-route rules directly."""
     # Out of range global sample rate
     with pytest.raises(ValueError, match="global_sample_rate"):
-        TraceNestRuleBasedSampler(global_sample_rate=1.5)
+        TpDogRuleBasedSampler(global_sample_rate=1.5)
 
     with pytest.raises(ValueError, match="global_sample_rate"):
-        TraceNestRuleBasedSampler(global_sample_rate=-0.1)
+        TpDogRuleBasedSampler(global_sample_rate=-0.1)
 
     # Invalid rule in sampler
     with pytest.raises(ValueError, match="endpoint_sample_rules"):
-        TraceNestRuleBasedSampler(endpoint_sample_rules={"/api/*": 2.0})
+        TpDogRuleBasedSampler(endpoint_sample_rules={"/api/*": 2.0})
 
     with pytest.raises(ValueError, match="endpoint_sample_rules"):
-        TraceNestRuleBasedSampler(endpoint_sample_rules={"/api/*": "invalid"})
+        TpDogRuleBasedSampler(endpoint_sample_rules={"/api/*": "invalid"})
 
 
 def test_ignore_endpoints_string_kwarg_and_formatting():
@@ -192,42 +192,72 @@ def test_ignore_endpoints_string_kwarg_and_formatting():
     assert cfg.ignore_endpoints == ["/health", "/metrics", "/readyz"]
 
     # Sampler also accepts comma-separated string
-    sampler = TraceNestRuleBasedSampler(ignore_endpoints="/health, /status")
+    sampler = TpDogRuleBasedSampler(ignore_endpoints="/health, /status")
     assert sampler.ignore_endpoints == ["/health", "/status"]
 
 
 def test_endpoint_sample_rules_empty_dict_overrides_env_var(monkeypatch):
     """Verify passing endpoint_sample_rules={} explicitly overrides rules in environment."""
-    monkeypatch.setenv("TRACENEST_ENDPOINT_SAMPLE_RULES", "/api/checkout/*=1.0,/search/*=0.5")
+    monkeypatch.setenv("TP_DOG_ENDPOINT_SAMPLE_RULES", "/api/checkout/*=1.0,/search/*=0.5")
     cfg = SDKConfig.from_env_and_kwargs(endpoint_sample_rules={})
     assert cfg.endpoint_sample_rules == {}
 
 
-def test_tracenest_init_validation_of_endpoint_sample_rules():
-    """Verify passing valid and invalid endpoint_sample_rules to tracenest.init()."""
-    import tracenest
+def test_tp_dog_init_handles_invalid_config_without_crashing():
+    """Verify passing invalid config does not raise ValueError and crash host application."""
+    import tp_dog
 
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     try:
-        # Invalid SDK-prop values raise ValueError before sampler is created
-        with pytest.raises(ValueError, match="TraceNest: endpoint_sample_rules"):
-            tracenest.init(
-                project_name="testpress",
-                endpoint_sample_rules={"/health": 2.5},
-            )
-
-        # Valid rules initialize properly
-        provider = tracenest.init(
+        # Invalid SDK-prop values must NOT crash host application; falls back safely
+        provider = tp_dog.init(
             project_name="testpress",
-            endpoint_sample_rules={
-                "/health": 0.0,
-                "/api/checkout/*": 1.0,
-            },
+            endpoint_sample_rules={"/health": 2.5},
         )
         assert provider is not None
-        assert tracenest._ACTIVE_CONFIG.endpoint_sample_rules == {
-            "/health": 0.0,
-            "/api/checkout/*": 1.0,
-        }
+        assert tp_dog._ACTIVE_CONFIG is not None
     finally:
-        tracenest._reset_for_testing()
+        tp_dog._reset_for_testing()
+
+
+def test_remote_parent_aware_sampler_respects_ignore_endpoints():
+    """Verify RemoteParentAwareSampler drops spans matching ignore_endpoints even with sampled remote parent."""
+    from opentelemetry.trace import (
+        NonRecordingSpan,
+        SpanContext,
+        TraceFlags,
+        TraceState,
+        set_span_in_context,
+    )
+
+    sampler = create_tp_dog_sampler(
+        global_sample_rate=1.0,
+        ignore_endpoints=["/health*", "/ping"],
+    )
+
+    remote_span_context = SpanContext(
+        trace_id=0x12345678123456781234567812345678,
+        span_id=0x1234567812345678,
+        is_remote=True,
+        trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        trace_state=TraceState(),
+    )
+    parent_ctx = set_span_in_context(NonRecordingSpan(remote_span_context))
+
+    # Should DROP ignored endpoint even though remote parent was SAMPLED
+    res1 = sampler.should_sample(
+        parent_context=parent_ctx,
+        trace_id=0x12345678123456781234567812345678,
+        name="GET /health",
+        attributes={"http.target": "/health"},
+    )
+    assert res1.decision == Decision.DROP
+
+    # Non-ignored endpoint should be SAMPLED as remote parent is sampled
+    res2 = sampler.should_sample(
+        parent_context=parent_ctx,
+        trace_id=0x12345678123456781234567812345678,
+        name="GET /api/checkout",
+        attributes={"http.target": "/api/checkout"},
+    )
+    assert res2.decision == Decision.RECORD_AND_SAMPLE

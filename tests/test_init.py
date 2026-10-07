@@ -6,23 +6,23 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
-import tracenest
-from tracenest.config import SDKConfig
-from tracenest.sanitize import sanitize_sql, sanitize_url
+import tp_dog
+from tp_dog.config import SDKConfig
+from tp_dog.sanitize import sanitize_sql, sanitize_url
 
 
 @pytest.fixture(autouse=True)
 def clean_sdk_state():
     """Ensure clean SDK state before and after each test."""
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     yield
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
 
 
 def test_init_creates_tracer_provider():
     """Verify init() sets up TracerProvider with correct Resource attributes."""
     exporter = InMemorySpanExporter()
-    provider = tracenest.init(
+    provider = tp_dog.init(
         project_name="test-service",
         environment="staging",
         version="1.2.3",
@@ -38,15 +38,15 @@ def test_init_creates_tracer_provider():
     assert resource_attrs["service.name"] == "test-service"
     assert resource_attrs["deployment.environment"] == "staging"
     assert resource_attrs["service.version"] == "1.2.3"
-    assert resource_attrs["telemetry.sdk.name"] == "tracenest"
+    assert resource_attrs["telemetry.sdk.name"] == "tp_dog"
     assert resource_attrs["telemetry.sdk.language"] == "python"
     assert resource_attrs["custom.tag"] == "value123"
 
 
 def test_init_idempotency():
     """Verify that calling init() multiple times returns the same provider."""
-    provider1 = tracenest.init(project_name="first-service")
-    provider2 = tracenest.init(project_name="second-service")
+    provider1 = tp_dog.init(project_name="first-service")
+    provider2 = tp_dog.init(project_name="second-service")
     assert provider1 is provider2
 
 
@@ -85,7 +85,7 @@ def test_config_from_env_and_kwargs(monkeypatch):
 def test_disabled_mode():
     """Verify that disabled mode prevents spans from being recorded."""
     exporter = InMemorySpanExporter()
-    provider = tracenest.init(
+    provider = tp_dog.init(
         project_name="disabled-service",
         disabled=True,
         exporter=exporter,
@@ -102,21 +102,21 @@ def test_disabled_mode():
 def test_span_creation_and_export():
     """Verify spans are created, executed within context, and exported correctly."""
     exporter = InMemorySpanExporter()
-    tracenest.init(
+    tp_dog.init(
         project_name="span-test-service",
         exporter=exporter,
         export_batch=False,
     )
 
-    tracer = tracenest.get_tracer("test-tracer")
+    tracer = tp_dog.get_tracer("test-tracer")
     with tracer.start_as_current_span("parent-operation") as parent:
         parent.set_attribute("parent.attr", "parent_val")
-        current_span = tracenest.get_current_span()
+        current_span = tp_dog.get_current_span()
         assert current_span == parent
 
         with tracer.start_as_current_span("child-operation") as child:
             child.set_attribute("child.attr", "child_val")
-            assert tracenest.get_current_span() == child
+            assert tp_dog.get_current_span() == child
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 2
@@ -250,7 +250,7 @@ class DummyTarget:
         return f"Hello, {name}"
 
 
-class MockInstalledIntegration(tracenest.BaseIntegration):
+class MockInstalledIntegration(tp_dog.BaseIntegration):
     name = "mock_installed"
 
     def is_installed(self) -> bool:
@@ -264,7 +264,7 @@ class MockInstalledIntegration(tracenest.BaseIntegration):
         self.wrap(DummyTarget, "greet", wrapper)
 
 
-class MockMissingIntegration(tracenest.BaseIntegration):
+class MockMissingIntegration(tp_dog.BaseIntegration):
     name = "mock_missing"
 
     def is_installed(self) -> bool:
@@ -292,47 +292,47 @@ def test_base_integration_wrap_and_unwrap():
 
 def test_patch_all_discovers_installed_libs():
     """Verify patch_all discovers and instruments installed integrations."""
-    manager = tracenest.get_integration_manager()
+    manager = tp_dog.get_integration_manager()
     manager.register("mock_installed", MockInstalledIntegration)
 
     target = DummyTarget()
-    applied = tracenest.patch_all()
+    applied = tp_dog.patch_all()
     assert "mock_installed" in applied
     assert target.greet("Bob") == "Intercepted: Hello, Bob"
 
 
 def test_patch_all_skips_missing_libs():
     """Verify patch_all skips uninstalled integrations."""
-    manager = tracenest.get_integration_manager()
+    manager = tp_dog.get_integration_manager()
     manager.register("mock_missing", MockMissingIntegration)
 
-    applied = tracenest.patch_all()
+    applied = tp_dog.patch_all()
     assert "mock_missing" not in applied
 
 
 def test_patch_all_respects_kwargs_and_config_disables():
     """Verify that individual integrations can be disabled via patch_all kwargs or config."""
-    manager = tracenest.get_integration_manager()
+    manager = tp_dog.get_integration_manager()
     manager.register("mock_installed", MockInstalledIntegration)
 
     # 1. Disabled via kwargs
-    applied = tracenest.patch_all(mock_installed=False)
+    applied = tp_dog.patch_all(mock_installed=False)
     assert "mock_installed" not in applied
 
     # 2. Disabled via config
-    tracenest.init(
+    tp_dog.init(
         project_name="test-service",
         integrations={"mock_installed": False},
         export_batch=False,
     )
-    applied_cfg = tracenest.patch_all()
+    applied_cfg = tp_dog.patch_all()
     assert "mock_installed" not in applied_cfg
 
 
 def test_safe_span_exporter_absorbs_network_exceptions():
     """Verify SafeSpanExporter absorbs ConnectionError and returns FAILURE without raising."""
     from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
-    from tracenest.exporter import SafeSpanExporter
+    from tp_dog.exporter import SafeSpanExporter
 
     class BrokenExporter(SpanExporter):
         def export(self, spans):
@@ -355,7 +355,7 @@ def test_safe_span_exporter_rate_limits_warnings(caplog):
     import logging
     from unittest.mock import patch
     from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
-    from tracenest.exporter import SafeSpanExporter
+    from tp_dog.exporter import SafeSpanExporter
 
     class BrokenExporter(SpanExporter):
         def export(self, spans):
@@ -363,7 +363,7 @@ def test_safe_span_exporter_rate_limits_warnings(caplog):
 
     safe = SafeSpanExporter(BrokenExporter(), endpoint="http://localhost:4318/v1/traces")
 
-    with caplog.at_level(logging.WARNING, logger="tracenest.exporter"):
+    with caplog.at_level(logging.WARNING, logger="tp_dog.exporter"):
         # Initial failure at t=100.0 (e.g. system uptime 100s)
         with patch("time.monotonic", return_value=100.0):
             res1 = safe.export([])
@@ -388,7 +388,7 @@ def test_safe_span_exporter_rate_limits_warnings(caplog):
 def test_unreachable_collector_never_crashes_application():
     """Verify that tracing with an unreachable collector endpoint NEVER crashes or raises."""
     # Point to a dead/non-existent port on localhost
-    provider = tracenest.init(
+    provider = tp_dog.init(
         project_name="resilience-test",
         endpoint="http://127.0.0.1:59999",
         export_batch=False,
@@ -409,11 +409,11 @@ def test_unreachable_collector_never_crashes_application():
 
 def test_auto_patch_true_instruments_installed_integrations():
     """Verify auto_patch=True auto-instruments installed integrations."""
-    manager = tracenest.get_integration_manager()
+    manager = tp_dog.get_integration_manager()
     manager.register("mock_installed", MockInstalledIntegration)
 
     target = DummyTarget()
-    tracenest.init(
+    tp_dog.init(
         project_name="auto-patch-test",
         auto_patch=True,
         exporter=InMemorySpanExporter(),
@@ -424,11 +424,11 @@ def test_auto_patch_true_instruments_installed_integrations():
 
 def test_auto_patch_false_skips_instrumentation():
     """Verify auto_patch=False skips auto-instrumentation."""
-    manager = tracenest.get_integration_manager()
+    manager = tp_dog.get_integration_manager()
     manager.register("mock_installed", MockInstalledIntegration)
 
     target = DummyTarget()
-    tracenest.init(
+    tp_dog.init(
         project_name="no-auto-patch-test",
         auto_patch=False,
         exporter=InMemorySpanExporter(),
@@ -440,11 +440,11 @@ def test_auto_patch_false_skips_instrumentation():
 
 def test_auto_patch_respects_integrations_config():
     """Verify auto_patch respects integrations config to disable specific integrations."""
-    manager = tracenest.get_integration_manager()
+    manager = tp_dog.get_integration_manager()
     manager.register("mock_installed", MockInstalledIntegration)
 
     target = DummyTarget()
-    tracenest.init(
+    tp_dog.init(
         project_name="config-disable-test",
         integrations={"mock_installed": False},
         exporter=InMemorySpanExporter(),
@@ -455,9 +455,9 @@ def test_auto_patch_respects_integrations_config():
 
 
 def test_middleware_init_class_exists():
-    """Verify TraceNestMiddleware can be imported."""
-    from tracenest.integrations.django.middleware_init import TraceNestMiddleware
-    assert TraceNestMiddleware is not None
+    """Verify TpDogMiddleware can be imported."""
+    from tp_dog.integrations.django.middleware_init import TpDogMiddleware
+    assert TpDogMiddleware is not None
 
 
 def test_sample_rate_zero():
@@ -494,7 +494,7 @@ def test_sample_rate_ratio():
 
 def test_str_to_bool_validation():
     import pytest
-    from tracenest.config import _str_to_bool
+    from tp_dog.config import _str_to_bool
     assert _str_to_bool("true") is True
     assert _str_to_bool("1") is True
     assert _str_to_bool("false") is False
@@ -507,7 +507,7 @@ def test_str_to_bool_validation():
 
 def test_sample_rate_validation():
     import pytest
-    from tracenest.config import SDKConfig
+    from tp_dog.config import SDKConfig
 
     # Valid rates
     cfg1 = SDKConfig.from_env_and_kwargs(sample_rate=0.5)
@@ -522,6 +522,39 @@ def test_sample_rate_validation():
         SDKConfig.from_env_and_kwargs(sample_rate=-0.1)
     with pytest.raises(ValueError, match="not a valid number"):
         SDKConfig.from_env_and_kwargs(sample_rate="not_a_number")
+
+
+def test_init_invalid_config_does_not_crash_app():
+    """Verify tp_dog.init() catches invalid config and falls back safely without raising ValueError."""
+    import tp_dog
+
+    tp_dog._reset_for_testing()
+    try:
+        provider = tp_dog.init(
+            project_name="safe-fallback-app",
+            sample_rate="not_a_number",
+        )
+        assert provider is not None
+        assert tp_dog._ACTIVE_CONFIG is not None
+        assert tp_dog._ACTIVE_CONFIG.sample_rate == 1.0
+    finally:
+        tp_dog._reset_for_testing()
+
+
+def test_init_configures_composite_propagator():
+    """Verify tp_dog.init() sets CompositePropagator supporting both TraceContext and Baggage."""
+    from opentelemetry.propagate import get_global_textmap
+    from opentelemetry.propagators.composite import CompositePropagator
+    import tp_dog
+
+    tp_dog._reset_for_testing()
+    try:
+        tp_dog.init(project_name="propagator-test")
+        prop = get_global_textmap()
+        assert isinstance(prop, CompositePropagator)
+    finally:
+        tp_dog._reset_for_testing()
+
 
 
 

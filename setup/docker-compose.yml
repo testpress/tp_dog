@@ -15,7 +15,7 @@ services:
 
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
-      - tempo_data:/var/tempo
+      - tempo_data:/var/lib/tempo
 
     ports:
       # Remote collector pushes traces here
@@ -68,6 +68,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver"
       - "--enable-feature=exemplar-storage"
       - "--storage.tsdb.retention.time=15d"
       - "--storage.tsdb.retention.size=20GB"

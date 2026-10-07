@@ -1,12 +1,12 @@
-# TraceNest
+# tp_dog
 
-TraceNest is an OpenTelemetry-based observability SDK for synchronous Django applications. It creates a Django request waterfall without application-code changes, then exports standard OTLP traces to an OpenTelemetry Collector (which automatically derives RED metrics in real time).
+tp_dog is an OpenTelemetry-based observability SDK for synchronous Django applications. It creates a Django request waterfall without application-code changes, then exports standard OTLP traces to an OpenTelemetry Collector (which automatically derives RED metrics in real time).
 
 ## Documentation
 
 For a comprehensive overview of the architecture, components, workflows, and decision log, see:
 
-- [**TraceNest Observability Overview**](docs/Overview.md) — Complete end-to-end technical overview, architecture, component breakdown, resource usage benchmarks, current limitations, and decision index.
+- [**tp_dog Observability Overview**](docs/Overview.md) — Complete end-to-end technical overview, architecture, component breakdown, resource usage benchmarks, current limitations, and decision index.
 - [**Operations Runbook**](docs/Runbook.md) — On-call operational guide, 6 essential questions with single-line answers, emergency killswitches, and collector diagnostics.
 - [**Production Deployment**](docs/Deployment.md) — Split deployment with the app + OTel Collector on one host and Tempo, Prometheus and Grafana on another; the URLs that must change, firewall rules, and verification steps.
 
@@ -60,9 +60,9 @@ A single `init()` call handles everything — it auto-detects installed integrat
 
 ```python
 # settings.py
-import tracenest
+import tp_dog
 
-tracenest.init(
+tp_dog.init(
     project_name="my-django-app",
     environment="production",
     endpoint="http://otel-collector:4318",
@@ -73,25 +73,25 @@ That's it. No `patch_all()` needed — `auto_patch=True` is the default.
 
 ### Option 2: Django middleware
 
-Add the TraceNest middleware to your `MIDDLEWARE` list. It initializes the SDK on the first request:
+Add the tp_dog middleware to your `MIDDLEWARE` list. It initializes the SDK on the first request:
 
 ```python
 MIDDLEWARE = [
-    "tracenest.integrations.django.TraceNestMiddleware",
+    "tp_dog.integrations.django.tp_dogMiddleware",
     # ... your other middleware ...
 ]
 ```
 
-Configuration comes from environment variables (`TRACENEST_PROJECT_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, etc.).
+Configuration comes from environment variables (`TP_DOG_PROJECT_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, etc.).
 
 ### Option 3: Environment variables only
 
 The most minimal setup — just set environment variables and call `init()` with no arguments:
 
 ```python
-import tracenest
+import tp_dog
 
-tracenest.init()
+tp_dog.init()
 ```
 
 ### Option 4: Custom bootstrap function
@@ -107,21 +107,21 @@ logger = logging.getLogger("config.otel")
 
 
 def setup_telemetry():
-    if os.environ.get("TRACENEST_DISABLED", "").lower() in ("1", "true"):
+    if os.environ.get("TP_DOG_DISABLED", "").lower() in ("1", "true"):
         return
     try:
-        import tracenest
+        import tp_dog
     except ImportError:
         return
     try:
-        tracenest.init(
-            project_name=os.environ.get("TRACENEST_PROJECT_NAME", "my-app"),
-            environment=os.environ.get("TRACENEST_ENVIRONMENT", "development"),
-            endpoint=os.environ.get("TRACENEST_ENDPOINT", "http://otel-collector:4318"),
+        tp_dog.init(
+            project_name=os.environ.get("TP_DOG_PROJECT_NAME", "my-app"),
+            environment=os.environ.get("TP_DOG_ENVIRONMENT", "development"),
+            endpoint=os.environ.get("TP_DOG_ENDPOINT", "http://otel-collector:4318"),
         )
-        logger.info("TraceNest initialized")
+        logger.info("tp_dog initialized")
     except Exception:
-        logger.exception("TraceNest init failed")
+        logger.exception("tp_dog init failed")
 ```
 
 Call `setup_telemetry()` from your `settings.py`.
@@ -132,20 +132,20 @@ Explicit `init()` arguments take precedence over environment variables, which ta
 
 | Setting | Environment variable | Default |
 | --- | --- | --- |
-| Project name | `TRACENEST_PROJECT_NAME` or `OTEL_SERVICE_NAME` | `unknown-project` |
-| Environment | `TRACENEST_ENVIRONMENT` or `OTEL_ENVIRONMENT` | `development` |
-| Version | `TRACENEST_VERSION` or `OTEL_SERVICE_VERSION` | `0.1.0` |
-| OTLP base endpoint | `TRACENEST_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
-| Trace endpoint | `TRACENEST_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Derived as `<endpoint>/v1/traces` |
-| Trace sample rate | `TRACENEST_SAMPLE_RATE` or `OTEL_TRACES_SAMPLER_ARG` | `1.0` |
-| Disable the SDK | `TRACENEST_DISABLED` or `OTEL_SDK_DISABLED` | `false` |
-| Debug logging | `TRACENEST_DEBUG` or `OTEL_LOG_LEVEL=debug` | `false` |
+| Project name | `TP_DOG_PROJECT_NAME` or `OTEL_SERVICE_NAME` | `unknown-project` |
+| Environment | `TP_DOG_ENVIRONMENT` or `OTEL_ENVIRONMENT` | `development` |
+| Version | `TP_DOG_VERSION` or `OTEL_SERVICE_VERSION` | `0.1.0` |
+| OTLP base endpoint | `TP_DOG_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
+| Trace endpoint | `TP_DOG_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Derived as `<endpoint>/v1/traces` |
+| Trace sample rate | `TP_DOG_SAMPLE_RATE` or `OTEL_TRACES_SAMPLER_ARG` | `1.0` |
+| Disable the SDK | `TP_DOG_DISABLED` or `OTEL_SDK_DISABLED` | `false` |
+| Debug logging | `TP_DOG_DEBUG` or `OTEL_LOG_LEVEL=debug` | `false` |
 | Auto-patch integrations | `auto_patch` kwarg | `true` |
 
 When `auto_patch=True` (the default), all installed integrations are automatically detected and patched during `init()`. This includes Django, PostgreSQL, Redis, and HTTP client instrumentors. You can disable specific integrations via the `integrations` dict:
 
 ```python
-tracenest.init(
+tp_dog.init(
     integrations={"redis": False, "requests": False},  # disable Redis and HTTP client tracing
 )
 ```
@@ -153,7 +153,7 @@ tracenest.init(
 Useful Django template options:
 
 ```python
-tracenest.init(
+tp_dog.init(
     trace_nested_templates=True,  # default True: captures template includes
     template_enabled=True,
     template_exclude=["django/forms/*", "debug_toolbar/*", "*/widgets/*"],
@@ -166,10 +166,10 @@ The SDK emits standard OpenTelemetry spans. The OpenTelemetry Collector's `spanm
 
 | Telemetry | Name | Generated By | Purpose |
 | --- | --- | --- | --- |
-| Trace | `django.request` | TraceNest SDK | Root `SERVER` span for each HTTP request |
-| Trace | `django.middleware.<name>` | TraceNest SDK | Class-based middleware execution |
-| Trace | `django.view.<name>` | TraceNest SDK | Django/DRF view execution |
-| Trace | `django.template: <name>` | TraceNest SDK | Template and included-template rendering |
+| Trace | `django.request` | tp_dog SDK | Root `SERVER` span for each HTTP request |
+| Trace | `django.middleware.<name>` | tp_dog SDK | Class-based middleware execution |
+| Trace | `django.view.<name>` | tp_dog SDK | Django/DRF view execution |
+| Trace | `django.template: <name>` | tp_dog SDK | Template and included-template rendering |
 | Metric | `apm_calls_total` | Collector (`spanmetrics`) | Request & error counter partitioned by route and status |
 | Metric | `apm_duration_milliseconds_bucket` | Collector (`spanmetrics`) | Latency histogram buckets for P50/P90/P95/P99 duration |
 

@@ -4,20 +4,17 @@ global:
   evaluation_interval: 10s
 
 scrape_configs:
+  # Self-monitoring of Prometheus server
+  - job_name: "prometheus"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["localhost:9090"]
 
-  - job_name: "otel-collector-spanmetrics"
-
-    scrape_interval: 10s
-    scrape_timeout: 10s
-
-    file_sd_configs:
-      - files:
-          - "/etc/prometheus/targets/*.json"
-        refresh_interval: 30s
-
-    metric_relabel_configs:
-      - source_labels:
-          - __name__
-        regex: "apm_traces_service_graph_(.*)"
-        target_label: "__name__"
-        replacement: "traces_service_graph_$1"
+  # Note: APM spanmetrics are pushed directly from the app server collector(s)
+  # to Prometheus via remote write (/api/v1/write). Inbound scraping is disabled.
+  # If any pull-based scrape targets are added in the future, uncomment below:
+  # - job_name: "otel-collector-spanmetrics"
+  #   file_sd_configs:
+  #     - files:
+  #         - "/etc/prometheus/targets/*.json"
+  #       refresh_interval: 30s

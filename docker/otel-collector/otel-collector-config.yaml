@@ -49,6 +49,8 @@ connectors:
     - name: span.type
     - name: normalized.service
     - name: normalized.operation
+    - name: institute.subdomain
+    - name: institute
     dimensions_cache_size: 5000
 exporters:
   otlp/tempo:

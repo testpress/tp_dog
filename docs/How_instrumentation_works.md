@@ -1,6 +1,6 @@
 # How Instrumentation Works
 
-This document explains the internal mechanics of **OpenTelemetry tracing** and how **TraceNest auto-instrumentation** captures request waterfalls without requiring changes to application source code.
+This document explains the internal mechanics of **OpenTelemetry tracing** and how **tp_dog auto-instrumentation** captures request waterfalls without requiring changes to application source code.
 
 ---
 
@@ -19,7 +19,7 @@ This document explains the internal mechanics of **OpenTelemetry tracing** and h
  └──────────────────────────────────┴──────────────────────────┘
 ```
 
-TraceNest uses **auto-instrumentation**: when you call `tracenest.init()`, it automatically discovers and patches supported libraries (Django, PostgreSQL, Redis, HTTP client) at runtime.
+tp_dog uses **auto-instrumentation**: when you call `tp_dog.init()`, it automatically discovers and patches supported libraries (Django, PostgreSQL, Redis, HTTP client) at runtime.
 
 ---
 
@@ -54,12 +54,12 @@ Python provides thread-safe, coroutine-safe context management via `contextvars`
 
 ---
 
-## 3. How TraceNest Auto-Instruments Libraries
+## 3. How tp_dog Auto-Instruments Libraries
 
-TraceNest uses dynamic function wrapping (monkey-patching) via the robust [`wrapt`](https://github.com/GrahamDumpleton/wrapt) library.
+tp_dog uses dynamic function wrapping (monkey-patching) via the robust [`wrapt`](https://github.com/GrahamDumpleton/wrapt) library.
 
 ```text
-       APPLICATION FLOW WITH TRACENEST MONKEY-PATCHING
+       APPLICATION FLOW WITH TP_DOG MONKEY-PATCHING
  ┌────────────────────────────────────────────────────────┐
  │ 1. App calls standard library function (e.g. cursor.execute)
  │                                                        │
@@ -112,7 +112,7 @@ with traced_span(span_name, kind=SpanKind.CLIENT) as span:
 ### 1. Reentrancy Protection (`reentrant_guard`)
 Some third-party libraries call their own internal methods recursively. Without protection, this could create duplicate spans or infinite loops.
 
-TraceNest uses a lightweight reentrancy guard:
+tp_dog uses a lightweight reentrancy guard:
 - The first (outermost) call sets an execution flag on the instance and starts a span.
 - Any nested internal calls see the active flag and pass through directly without generating redundant spans.
 
@@ -129,12 +129,12 @@ App Exit ◄── [Outer Wrapper: Trace Ended]
 ### 2. Context & Route Enrichment
 To allow Prometheus spanmetrics to group downstream operations (like SQL queries or Redis commands) by endpoint route, child spans need access to the normalized route (`/api/products/{id}/`).
 
-TraceNest maintains an in-flight route context (`RouteEnrichingSpanProcessor`). When a child span finishes, it automatically inherits the active `http.route` from the parent request.
+tp_dog maintains an in-flight route context (`RouteEnrichingSpanProcessor`). When a child span finishes, it automatically inherits the active `http.route` from the parent request.
 
 ### 3. Fail-Safe Isolation (`SafeSpanExporter`)
 The golden rule of APM SDKs: **An observability failure must NEVER degrade or crash the host application.**
 
-- If the OTel Collector is down, overloaded, or unreachable, TraceNest's `SafeSpanExporter` catches network exceptions and logs rate-limited warnings.
+- If the OTel Collector is down, overloaded, or unreachable, tp_dog's `SafeSpanExporter` catches network exceptions and logs rate-limited warnings.
 - Telemetry spans are dropped cleanly in the background without affecting user HTTP responses.
 
 ---
@@ -145,7 +145,7 @@ The golden rule of APM SDKs: **An observability failure must NEVER degrade or cr
  ┌───────────────────────────────────────────────────────────┐
  │                  How Everything Fits Together             │
  ├───────────────────────────────────────────────────────────┤
- │ 1. `tracenest.init()` patches target modules via `wrapt`. │
+ │ 1. `tp_dog.init()` patches target modules via `wrapt`. │
  │ 2. Inbound HTTP requests start root `django.request` span.│
  │ 3. Downstream operations inherit context via `contextvars`│
  │    and generate child spans (views, SQL, Redis, HTTP).    │

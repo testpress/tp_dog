@@ -1,7 +1,7 @@
 # Grafana Dashboards & Navigation Guide
 
 This guide covers the **4 pre-provisioned Grafana APM dashboards** in the
-TraceNest observability stack, explaining how each is structured, how to
+tp_dog observability stack, explaining how each is structured, how to
 navigate between them, and how to execute end-to-end incident triage.
 
 > **Why only 4?** The suite originally shipped 8 dashboards — two generic
@@ -9,7 +9,7 @@ navigate between them, and how to execute end-to-end incident triage.
 > Overview/Endpoint, PostgreSQL Overview/Query, Redis Overview/Command). The six
 > component-specific dashboards were consolidated into two **generic** dashboards
 > driven by the `normalized.service` / `normalized.operation` attributes that the
-> Collector's `transform/normalize` processor derives from spans. A service is
+> SDK emits on spans. A service is
 > now a *value of a variable*, not a dashboard. Django, PostgreSQL, PgBouncer,
 > and Redis all work through the same two panels, and a newly instrumented
 > service appears in the catalog with no dashboard work at all.
@@ -21,14 +21,14 @@ navigate between them, and how to execute end-to-end incident triage.
 ```text
                       ┌─────────────────────────────────────────┐
                       │          Needs Attention                │
-                      │   tracenest-needs-attention             │
+                      │   tp_dog-needs-attention             │
                       │  (Triage: severity counters + issues)   │
                       └────────────────────┬────────────────────┘
                                            │
                                            ▼
                       ┌─────────────────────────────────────────┐
                       │           Service Catalog               │
-                      │        tracenest-project-catalog        │
+                      │        tp_dog-project-catalog        │
                       │  (auto-detected services, health,      │
                       │   throughput, % time by downstream)     │
                       └────────────────────┬────────────────────┘
@@ -65,8 +65,8 @@ navigate between them, and how to execute end-to-end incident triage.
 
 ### 1. Needs Attention — Operational Issues Overview
 
-* **UID**: `tracenest-needs-attention` (v1003) · 5 panels (3 stat, 2 dynamic-text)
-* **Source**: [`tracenest_needs_attention.json`](../docker/grafana/dashboards/tracenest_needs_attention.json)
+* **UID**: `tp_dog-needs-attention` (v1003) · 5 panels (3 stat, 2 dynamic-text)
+* **Source**: [`tp_dog_needs_attention.json`](../docker/grafana/dashboards/tp_dog_needs_attention.json)
 * **Purpose**: Primary incident triage board. Surfaces any service or operation currently failing thresholds.
 * **Key Panels**:
   * **Critical / Warning / Info counters** — three stat panels, each counting
@@ -99,10 +99,10 @@ navigate between them, and how to execute end-to-end incident triage.
 
 ---
 
-### 2. TraceNest APM — Service Catalog
+### 2. tp_dog APM — Service Catalog
 
-* **UID**: `tracenest-project-catalog` (v1003) · 5 panels (1 dynamic-text, 1 table, 2 timeseries)
-* **Source**: [`tracenest_service_catalog.json`](../docker/grafana/dashboards/tracenest_service_catalog.json)
+* **UID**: `tp_dog-project-catalog` (v1003) · 5 panels (1 dynamic-text, 1 table, 2 timeseries)
+* **Source**: [`tp_dog_service_catalog.json`](../docker/grafana/dashboards/tp_dog_service_catalog.json)
 * **Purpose**: Single-pane-of-glass overview across every instrumented service.
 * **Key Panels**:
   * **Active Issues & Anomaly Detection** — the same A–G detection logic as
@@ -132,7 +132,7 @@ automatically.
 ### 3. Generic Service Overview
 
 * **UID**: `generic-service-overview` (v1005) · 5 panels (3 timeseries, 1 table, 1 row)
-* **Source**: [`tracenest_generic_service_overview.json`](../docker/grafana/dashboards/tracenest_generic_service_overview.json)
+* **Source**: [`tp_dog_generic_service_overview.json`](../docker/grafana/dashboards/tp_dog_generic_service_overview.json)
 * **Purpose**: Per-service health for **any** service. This single dashboard
   replaced the Django / PostgreSQL / Redis overview dashboards.
 * **Key Panels**:
@@ -154,7 +154,7 @@ one off-nominal value that would otherwise appear as a service.
 ### 4. Generic Operation Details
 
 * **UID**: `generic-operation-details` (v1011) · 6 panels (3 timeseries, 1 table, 2 rows)
-* **Source**: [`tracenest_generic_operation_details.json`](../docker/grafana/dashboards/tracenest_generic_operation_details.json)
+* **Source**: [`tp_dog_generic_operation_details.json`](../docker/grafana/dashboards/tp_dog_generic_operation_details.json)
 * **Purpose**: Deep-dive on a single operation within a single service. This
   replaced the Django Endpoint / PostgreSQL Query / Redis Command dashboards.
 * **Key Panels**:
@@ -261,8 +261,8 @@ Tempo span names are prefixed `🔹` for pooled and `🟢` for direct PostgreSQL
 
 | I want to… | Open |
 | :--- | :--- |
-| Triage an incident | [`tracenest-needs-attention`](../docker/grafana/dashboards/tracenest_needs_attention.json) |
-| See overall service health | [`tracenest-project-catalog`](../docker/grafana/dashboards/tracenest_service_catalog.json) |
-| Drill into any service | [`generic-service-overview`](../docker/grafana/dashboards/tracenest_generic_service_overview.json) |
-| Drill into any operation | [`generic-operation-details`](../docker/grafana/dashboards/tracenest_generic_operation_details.json) |
+| Triage an incident | [`tp_dog-needs-attention`](../docker/grafana/dashboards/tp_dog_needs_attention.json) |
+| See overall service health | [`tp_dog-project-catalog`](../docker/grafana/dashboards/tp_dog_service_catalog.json) |
+| Drill into any service | [`generic-service-overview`](../docker/grafana/dashboards/tp_dog_generic_service_overview.json) |
+| Drill into any operation | [`generic-operation-details`](../docker/grafana/dashboards/tp_dog_generic_operation_details.json) |
 | Inspect a raw trace | Grafana **Explore** → Tempo datasource |

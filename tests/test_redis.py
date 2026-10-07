@@ -5,21 +5,21 @@ from unittest.mock import MagicMock, patch
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind, StatusCode
 
-import tracenest
-from tracenest.integrations.redis import RedisIntegration
+import tp_dog
+from tp_dog.integrations.redis import RedisIntegration
 
 
 @pytest.fixture(autouse=True)
 def clean_sdk():
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     yield
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
 
 
 @pytest.fixture
 def memory_exporter():
     exporter = InMemorySpanExporter()
-    tracenest.init(
+    tp_dog.init(
         project_name="test-redis-service",
         environment="test",
         exporter=exporter,
@@ -29,11 +29,11 @@ def memory_exporter():
 
 
 def test_redis_integration_manager_registration():
-    from tracenest.integrations import get_integration_manager
+    from tp_dog.integrations import get_integration_manager
 
     mgr = get_integration_manager()
     integ = mgr._registered_classes["redis"]
-    assert integ == "tracenest.integrations.redis.RedisIntegration"
+    assert integ == "tp_dog.integrations.redis.RedisIntegration"
     resolved = mgr._resolve_class(integ)
     assert resolved is RedisIntegration
 
@@ -41,7 +41,7 @@ def test_redis_integration_manager_registration():
 def test_django_redis_cache_tracing(memory_exporter):
     """Verify that django_redis cache backends emit django_redis.cache.<op> spans with db.system='redis'."""
     from opentelemetry.trace import SpanKind
-    from tracenest.integrations.django.cache import make_traced_cache_op
+    from tp_dog.integrations.django.cache import make_traced_cache_op
 
     class FakeRedisCache:
         __module__ = "django_redis.cache"
@@ -74,7 +74,7 @@ def test_django_redis_cache_tracing(memory_exporter):
 def test_cache_span_sets_redis_db_system(memory_exporter):
     """Redis cache spans must set db.system='redis' so the collector and APM dashboards identify Redis."""
     from opentelemetry.trace import SpanKind
-    from tracenest.integrations.django.cache import make_traced_cache_op
+    from tp_dog.integrations.django.cache import make_traced_cache_op
 
     class FakeRedisCache:
         __module__ = "django_redis.cache"
@@ -100,7 +100,7 @@ def test_cache_span_sets_redis_db_system(memory_exporter):
 def test_non_redis_cache_not_misclassified(memory_exporter):
     """Verify that a non-Redis backend with 'redis' in module name (e.g. myapp.redis_helpers) is not misclassified."""
     from opentelemetry.trace import SpanKind
-    from tracenest.integrations.django.cache import make_traced_cache_op
+    from tp_dog.integrations.django.cache import make_traced_cache_op
 
     class HelperCache:
         __module__ = "myapp.redis_helpers"
@@ -158,14 +158,14 @@ def test_redis_integration_apply_patch_and_uninstrument(monkeypatch):
 
 
 def test_redis_request_hook_prefixes_command_span():
-    """Verify _tracenest_redis_request_hook updates command span with redis: prefix."""
-    from tracenest.integrations.redis.integration import _tracenest_redis_request_hook
+    """Verify _tp_dog_redis_request_hook updates command span with redis: prefix."""
+    from tp_dog.integrations.redis.integration import _tp_dog_redis_request_hook
 
     mock_span = MagicMock()
     mock_span.name = "GET"
     mock_span.is_recording.return_value = True
 
-    _tracenest_redis_request_hook(mock_span, None, ("GET", "key"), {})
+    _tp_dog_redis_request_hook(mock_span, None, ("GET", "key"), {})
     mock_span.update_name.assert_called_once_with("🔸 GET")
     set_attrs = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
     assert set_attrs.get("db.system") == "redis"
@@ -175,7 +175,7 @@ def test_redis_request_hook_prefixes_command_span():
 def test_cache_suppresses_downstream_driver_instrumentation():
     """Verify that during cache operation execution, downstream OTel instrumentors are suppressed."""
     from opentelemetry.instrumentation.utils import is_instrumentation_enabled
-    from tracenest.integrations.django.cache import make_traced_cache_op
+    from tp_dog.integrations.django.cache import make_traced_cache_op
 
     instrumentation_state_during_call = []
 
@@ -195,8 +195,8 @@ def test_cache_suppresses_downstream_driver_instrumentation():
 
 def test_cache_set_many_suppresses_pipeline_driver_instrumentation(memory_exporter):
     """Verify that during set_many pipeline execution, downstream driver spans are suppressed."""
-    from tracenest.integrations.django.cache import make_traced_cache_op, _in_cache_span
-    from tracenest.integrations.redis.integration import _redis_suppress_guard
+    from tp_dog.integrations.django.cache import make_traced_cache_op, _in_cache_span
+    from tp_dog.integrations.redis.integration import _redis_suppress_guard
 
     class DummyPipeline:
         def execute(self):

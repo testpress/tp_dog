@@ -1,12 +1,12 @@
 # Custom Instrumentation Guide
 
-This guide explains **how custom instrumentation works in TraceNest** and provides a step-by-step walkthrough for **authoring custom instrumentation for any new library, database, or background worker**.
+This guide explains **how custom instrumentation works in tp_dog** and provides a step-by-step walkthrough for **authoring custom instrumentation for any new library, database, or background worker**.
 
 ---
 
-## 1. How Custom Instrumentation Works in TraceNest
+## 1. How Custom Instrumentation Works in tp_dog
 
-TraceNest uses **dynamic function wrapping (monkey-patching)** powered by [`wrapt`](https://github.com/GrahamDumpleton/wrapt), combined with OpenTelemetry's context and span APIs.
+tp_dog uses **dynamic function wrapping (monkey-patching)** powered by [`wrapt`](https://github.com/GrahamDumpleton/wrapt), combined with OpenTelemetry's context and span APIs.
 
 ### Architecture Overview
 
@@ -41,16 +41,16 @@ TraceNest uses **dynamic function wrapping (monkey-patching)** powered by [`wrap
 
 ---
 
-### Key Primitives Provided by TraceNest
+### Key Primitives Provided by tp_dog
 
-TraceNest provides built-in primitives in `tracenest.tracing` and `tracenest.integrations.base` to eliminate boilerplate:
+tp_dog provides built-in primitives in `tp_dog.tracing` and `tp_dog.integrations.base` to eliminate boilerplate:
 
 | Primitive | Purpose | Location |
 | :--- | :--- | :--- |
-| **`BaseIntegration`** | Base class managing patch lifecycle, import hooks, and unpatching. | `tracenest.integrations.base` |
-| **`traced_span()`** | Context manager handling span creation, status (`OK`/`ERROR`), exception recording, and automatic route enrichment. | `tracenest.tracing` |
-| **`reentrant_guard()`** | Guard preventing duplicate spans when wrapped libraries call their own internal methods. | `tracenest.tracing` |
-| **`sanitize_sql()` / Redaction** | Strips literal values, credentials, and PII before attributes are attached. | `tracenest.sanitize` |
+| **`BaseIntegration`** | Base class managing patch lifecycle, import hooks, and unpatching. | `tp_dog.integrations.base` |
+| **`traced_span()`** | Context manager handling span creation, status (`OK`/`ERROR`), exception recording, and automatic route enrichment. | `tp_dog.tracing` |
+| **`reentrant_guard()`** | Guard preventing duplicate spans when wrapped libraries call their own internal methods. | `tp_dog.tracing` |
+| **`sanitize_sql()` / Redaction** | Strips literal values, credentials, and PII before attributes are attached. | `tp_dog.sanitize` |
 
 ---
 
@@ -63,22 +63,22 @@ To instrument a new library (e.g. **Celery**, **PyMongo**, **Elasticsearch**, **
 ### Step 1: Subclass `BaseIntegration`
 
 Create an integration class that inherits from `BaseIntegration` and implements:
-1. `name`: Unique string identifier (used in `tracenest.init(integrations={'my_lib': True})`).
+1. `name`: Unique string identifier (used in `tp_dog.init(integrations={'my_lib': True})`).
 2. `is_installed()`: Checks whether the target library is importable.
 3. `_apply_patch()`: Applies wrappers to target classes/functions.
 
 ```python
-# tracenest/integrations/pymongo/integration.py
+# tp_dog/integrations/pymongo/integration.py
 
 import importlib
 import logging
 from typing import Optional
 
-from tracenest.config import SDKConfig
-from tracenest.integrations.base import BaseIntegration
+from tp_dog.config import SDKConfig
+from tp_dog.integrations.base import BaseIntegration
 from .client import traced_mongo_command
 
-logger = logging.getLogger("tracenest.integrations.pymongo")
+logger = logging.getLogger("tp_dog.integrations.pymongo")
 
 
 class PyMongoIntegration(BaseIntegration):
@@ -129,11 +129,11 @@ class PyMongoIntegration(BaseIntegration):
 The wrapper intercepts calls, extracts metadata, manages spans with `traced_span`, and calls the original function.
 
 ```python
-# tracenest/integrations/pymongo/client.py
+# tp_dog/integrations/pymongo/client.py
 
 from typing import Any, Callable
 from opentelemetry.trace import SpanKind
-from tracenest.tracing import traced_span, reentrant_guard
+from tp_dog.tracing import traced_span, reentrant_guard
 
 
 def traced_mongo_command(operation_name: str) -> Callable[..., Any]:
@@ -146,7 +146,7 @@ def traced_mongo_command(operation_name: str) -> Callable[..., Any]:
         kwargs: dict,
     ) -> Any:
         # 1. Guard against recursive internal calls
-        with reentrant_guard(instance, f"_tracenest_guard_{operation_name}") as is_outermost:
+        with reentrant_guard(instance, f"_tp_dog_guard_{operation_name}") as is_outermost:
             if not is_outermost:
                 return wrapped(*args, **kwargs)
 
@@ -174,24 +174,24 @@ def traced_mongo_command(operation_name: str) -> Callable[..., Any]:
 
 ### Step 3: Register the Integration with `IntegrationManager`
 
-Register your new integration so `tracenest.init()` will automatically detect and patch it:
+Register your new integration so `tp_dog.init()` will automatically detect and patch it:
 
 ```python
-from tracenest.integrations.manager import get_integration_manager
-from tracenest.integrations.pymongo.integration import PyMongoIntegration
+from tp_dog.integrations.manager import get_integration_manager
+from tp_dog.integrations.pymongo.integration import PyMongoIntegration
 
 # Register the integration class
 get_integration_manager().register("pymongo", PyMongoIntegration)
 get_integration_manager().register("mongodb", PyMongoIntegration)  # Alias
 ```
 
-Or add it to `_BUILTIN_INTEGRATIONS` inside `tracenest/integrations/manager.py`:
+Or add it to `_BUILTIN_INTEGRATIONS` inside `tp_dog/integrations/manager.py`:
 
 ```python
 _BUILTIN_INTEGRATIONS: Dict[str, str] = {
     # ... existing integrations
-    "pymongo": "tracenest.integrations.pymongo.PyMongoIntegration",
-    "mongodb": "tracenest.integrations.pymongo.PyMongoIntegration",
+    "pymongo": "tp_dog.integrations.pymongo.PyMongoIntegration",
+    "mongodb": "tp_dog.integrations.pymongo.PyMongoIntegration",
 }
 ```
 
@@ -207,7 +207,7 @@ Write a test to verify:
 
 ```python
 def test_pymongo_instrumentation(in_memory_exporter):
-    from tracenest.integrations.pymongo.integration import PyMongoIntegration
+    from tp_dog.integrations.pymongo.integration import PyMongoIntegration
     
     integration = PyMongoIntegration()
     assert integration.instrument() is True
@@ -228,7 +228,7 @@ In addition to building automatic integrations, developers can instrument custom
 ### A. Using Context Managers
 
 ```python
-from tracenest.tracing import traced_span
+from tp_dog.tracing import traced_span
 from opentelemetry.trace import SpanKind
 
 def calculate_risk_score(user_id: int, transaction_amount: float):
@@ -253,7 +253,7 @@ def calculate_risk_score(user_id: int, transaction_amount: float):
 ```python
 import functools
 from opentelemetry.trace import SpanKind
-from tracenest.tracing import traced_span
+from tp_dog.tracing import traced_span
 
 
 def trace_action(action_name: str, kind: SpanKind = SpanKind.INTERNAL):
@@ -298,7 +298,7 @@ def dispatch_background_email(recipient: str, subject: str):
 
 ```python
 from opentelemetry.propagate import extract
-from tracenest.tracing import traced_span
+from tp_dog.tracing import traced_span
 from opentelemetry.trace import SpanKind
 
 def process_background_email(recipient: str, subject: str, request_headers: dict):

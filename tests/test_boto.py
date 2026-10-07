@@ -7,19 +7,19 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import pytest
-import tracenest
-from tracenest.integrations.boto import BotoIntegration
-from tracenest.integrations.manager import get_integration_manager
+import tp_dog
+from tp_dog.integrations.boto import BotoIntegration
+from tp_dog.integrations.manager import get_integration_manager
 
 pytest.importorskip("botocore")
 
 
 def setup_function():
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
 
 
 def teardown_function():
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
 
 
 def test_boto_integration_discovery():
@@ -41,7 +41,7 @@ def test_boto_integration_discovery():
 def test_boto_integration_instrument_lifecycle():
     """Verify BotoIntegration instrument and uninstrument calls."""
     exporter = InMemorySpanExporter()
-    tracenest.init(
+    tp_dog.init(
         project_name="boto-test-service",
         exporter=exporter,
         export_batch=False,
@@ -62,10 +62,10 @@ def test_boto_integration_instrument_lifecycle():
 
 
 def test_boto_request_hook_s3_icon():
-    """Verify _tracenest_boto_request_hook prefixes S3 spans with 🪣."""
-    from tracenest.integrations.boto.integration import (
-        _tracenest_boto_request_hook,
-        _tracenest_boto_response_hook,
+    """Verify _tp_dog_boto_request_hook prefixes S3 spans with 🪣."""
+    from tp_dog.integrations.boto.integration import (
+        _tp_dog_boto_request_hook,
+        _tp_dog_boto_response_hook,
     )
 
     class MockSpan:
@@ -79,14 +79,14 @@ def test_boto_request_hook_s3_icon():
             self.name = new_name
 
     s3_span = MockSpan("S3.ListObjectsV2")
-    _tracenest_boto_request_hook(s3_span, "s3", "ListObjectsV2", {})
+    _tp_dog_boto_request_hook(s3_span, "s3", "ListObjectsV2", {})
     assert s3_span.name == "🪣 S3.ListObjectsV2"
 
     # Idempotent: should not double-prefix
-    _tracenest_boto_response_hook(s3_span, "s3", "ListObjectsV2", {})
+    _tp_dog_boto_response_hook(s3_span, "s3", "ListObjectsV2", {})
     assert s3_span.name == "🪣 S3.ListObjectsV2"
 
     # Non-S3 AWS call gets ☁️
     sqs_span = MockSpan("SQS.SendMessage")
-    _tracenest_boto_request_hook(sqs_span, "sqs", "SendMessage", {})
+    _tp_dog_boto_request_hook(sqs_span, "sqs", "SendMessage", {})
     assert sqs_span.name == "☁️ SQS.SendMessage"

@@ -70,7 +70,7 @@ OpenTelemetry provides a single, standardized, open protocol for generating and 
 ```text
 ┌─────────────────┐
 │   Application   │
-│   (TraceNest)   │
+│   (tp_dog)   │
 └────────┬────────┘
          │ OTLP / HTTP (Standard OpenTelemetry Protocol)
          ▼
@@ -101,7 +101,7 @@ OpenTelemetry provides a single, standardized, open protocol for generating and 
 A **Resource** captures static metadata about the entity producing telemetry (e.g., service name, environment, cluster, host, version).
 
 Common standard resource attributes:
-- `service.name`: The identifier for your microservice (e.g. `order-service`).
+- `service.name`: OTel's name for the process identity. In tp_dog this is the **project** (the instrumented application, e.g. `course-service`) — it is not a running component.
 - `deployment.environment.name` or `deployment.environment`: Deployment tier (e.g. `production`, `staging`, `development`).
 - `service.version`: The semantic release version (e.g. `1.2.0`).
 - `service.instance.id`: A unique instance identifier (e.g., hostname and process ID).
@@ -221,7 +221,7 @@ The collector automatically generates:
 Every time-series in Prometheus is uniquely identified by its **metric name** and an optional set of **key-value labels** (dimensions):
 
 ```text
-apm_calls_total{service_name="course-service", http_route="/api/courses/{id}/", status_code="200"} 452
+apm_calls_total{project_name="course-service", http_route="/api/courses/{id}/", status_code="200"} 452
 └──────┬──────┘ └──────────────────────────────────────┬──────────────────────────────────────────┘  └─┬─┘
   Metric Name                                   Labels (Dimensions)                                   Value
 ```
@@ -240,7 +240,7 @@ PromQL allows real-time aggregation and calculation over time-series data:
 * **Rate of Requests (RPS / Throughput)**:
   Uses `rate()` over a moving time window (e.g., `5m`) and aggregates by dimension:
   ```promql
-  sum(rate(apm_calls_total{service_name="course-service"}[5m])) by (http_route)
+  sum(rate(apm_calls_total{project_name="course-service"}[5m])) by (http_route)
   ```
 
 * **Error Rate Percentage**:

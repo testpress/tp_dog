@@ -205,7 +205,7 @@ LOGGING = {
     },
 }
 
-# TraceNest OpenTelemetry bootstrap (fail-safe; no-op when SDK absent)
+# tp_dog OpenTelemetry bootstrap (fail-safe; no-op when SDK absent)
 from config.otel import setup_telemetry
 
 setup_telemetry()

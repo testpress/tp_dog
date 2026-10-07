@@ -214,8 +214,8 @@ services:
   #     - ./sample-django-lite-app/app.py:/app/app.py
   #     - ./src:/app/src
   #   environment:
-  #     - TRACENEST_PROJECT_NAME=django-lite-app
-  #     - TRACENEST_ENVIRONMENT=production
+  #     - TP_DOG_PROJECT_NAME=django-lite-app
+  #     - TP_DOG_ENVIRONMENT=production
   #     - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-2:4318
   #   networks:
   #     - default
@@ -247,7 +247,7 @@ services:
   #     - ./docker/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
   #   ports:
   #     - "4317:4317" # OTLP gRPC receiver
-  #     - "4318:4318" # OTLP HTTP receiver (used by tracenest SDK)
+  #     - "4318:4318" # OTLP HTTP receiver (used by tp_dog SDK)
   #     - "8888:8888" # Internal Collector metrics endpoint (heap, queues, rss)
   #     - "8889:8889" # Prometheus metrics exporter
   #   depends_on:

@@ -1,6 +1,6 @@
 """Tests for the instrumentation transparency invariant.
 
-TraceNest must never:
+tp_dog must never:
 
   1. prevent application execution (``pre``),
   2. execute application code more than once (``once``),
@@ -13,10 +13,10 @@ the three properties.
 
 import pytest
 
-import tracenest
-from tracenest.integrations.base import BaseIntegration
-from tracenest.safety import UNTRACED, attempt, safe_set_attribute
-from tracenest.tracing import traced_span
+import tp_dog
+from tp_dog.integrations.base import BaseIntegration
+from tp_dog.safety import UNTRACED, attempt, safe_set_attribute
+from tp_dog.tracing import traced_span
 
 
 class _FakeIntegration(BaseIntegration):
@@ -47,7 +47,7 @@ def test_attempt_passes_through_success():
 
 
 def test_untraced_sentinel_is_falsy_and_singleton():
-    from tracenest.safety import _Untraced
+    from tp_dog.safety import _Untraced
 
     assert bool(UNTRACED) is False
     assert _Untraced() is UNTRACED
@@ -68,9 +68,9 @@ def test_safe_set_attribute_never_raises():
 
 def test_pre_app_telemetry_failure_still_runs_statement():
     """A bug in DB span construction must not prevent the query executing."""
-    import tracenest.integrations.postgres.cursor as cur
+    import tp_dog.integrations.postgres.cursor as cur
 
-    tracenest.init(project_name="pre-app-1", export_batch=False)
+    tp_dog.init(project_name="pre-app-1", export_batch=False)
     calls = []
 
     def execute(sql, *a, **k):
@@ -88,9 +88,9 @@ def test_pre_app_telemetry_failure_still_runs_statement():
 
 
 def test_pre_app_telemetry_failure_still_runs_execute_wrapper():
-    import tracenest.integrations.postgres.cursor as cur
+    import tp_dog.integrations.postgres.cursor as cur
 
-    tracenest.init(project_name="pre-app-2", export_batch=False)
+    tp_dog.init(project_name="pre-app-2", export_batch=False)
     calls = []
 
     def execute(sql, params, many, context):
@@ -103,7 +103,7 @@ def test_pre_app_telemetry_failure_still_runs_execute_wrapper():
     original = cur._build_db_span_context
     cur._build_db_span_context = _boom
     try:
-        cur.tracenest_django_db_execute_wrapper(
+        cur.tp_dog_django_db_execute_wrapper(
             execute, "SELECT 1", None, False, {"cursor": Cur(), "connection": None}
         )
     finally:
@@ -114,9 +114,9 @@ def test_pre_app_telemetry_failure_still_runs_execute_wrapper():
 
 def test_post_app_telemetry_failure_does_not_change_result():
     """A route-resolution bug must not turn a 200 into a 500."""
-    import tracenest.integrations.django.request as req_mod
+    import tp_dog.integrations.django.request as req_mod
 
-    tracenest.init(project_name="post-app", export_batch=False)
+    tp_dog.init(project_name="post-app", export_batch=False)
 
     class Resp:
         status_code = 200
@@ -159,9 +159,9 @@ def test_post_app_telemetry_failure_does_not_change_result():
 )
 def test_failing_write_statement_executes_exactly_once(statement):
     """Write statements are where an accidental retry does the most damage."""
-    from tracenest.integrations.postgres.cursor import traced_django_cursor_exec
+    from tp_dog.integrations.postgres.cursor import traced_django_cursor_exec
 
-    tracenest.init(project_name="once-write", export_batch=False)
+    tp_dog.init(project_name="once-write", export_batch=False)
     calls = []
 
     def execute(sql, *a, **k):
@@ -175,9 +175,9 @@ def test_failing_write_statement_executes_exactly_once(statement):
 
 
 def test_failing_read_statement_executes_exactly_once():
-    from tracenest.integrations.postgres.cursor import traced_django_cursor_exec
+    from tp_dog.integrations.postgres.cursor import traced_django_cursor_exec
 
-    tracenest.init(project_name="once-read", export_batch=False)
+    tp_dog.init(project_name="once-read", export_batch=False)
     calls = []
 
     def execute(sql, *a, **k):
@@ -229,10 +229,10 @@ def test_application_exception_propagates_unchanged():
 
 def test_db_rowcount_fault_preserves_successful_result():
     """A closed/broken cursor raises on ``.rowcount``; the result must survive."""
-    from tracenest.integrations.postgres import cursor as cur
+    from tp_dog.integrations.postgres import cursor as cur
 
-    tracenest._reset_for_testing()
-    tracenest.init(project_name="rowcount-fault", disabled=True)
+    tp_dog._reset_for_testing()
+    tp_dog.init(project_name="rowcount-fault", disabled=True)
 
     class ClosedCursor:
         @property
@@ -254,18 +254,18 @@ def test_db_rowcount_fault_preserves_successful_result():
 def test_requests_hooks_never_block_outbound_http():
     """OTel calls these hooks *unguarded*; a fault must not stop the request.
 
-    ``tracenest_request_hook`` runs before ``requests.send``, so raising here
-    would block every outbound HTTP call. ``tracenest_response_hook`` runs
+    ``tp_dog_request_hook`` runs before ``requests.send``, so raising here
+    would block every outbound HTTP call. ``tp_dog_response_hook`` runs
     outside the instrumentor's try/except, so raising there would surface an
     error in the app after the response had already arrived.
     """
-    from tracenest.integrations.requests.client import (
-        tracenest_request_hook,
-        tracenest_response_hook,
+    from tp_dog.integrations.requests.client import (
+        tp_dog_request_hook,
+        tp_dog_response_hook,
     )
 
-    tracenest._reset_for_testing()
-    tracenest.init(project_name="hook-fault", disabled=True)
+    tp_dog._reset_for_testing()
+    tp_dog.init(project_name="hook-fault", disabled=True)
 
     class Span:
         def set_attribute(self, key, value):
@@ -293,8 +293,8 @@ def test_requests_hooks_never_block_outbound_http():
             raise RuntimeError("status_code blew up")
 
     # Neither may raise: the instrumentor would not catch it.
-    tracenest_request_hook(Span(), BadRequest())
-    tracenest_response_hook(Span(), BadRequest(), BadResponse())
+    tp_dog_request_hook(Span(), BadRequest())
+    tp_dog_response_hook(Span(), BadRequest(), BadResponse())
 
 
 # --------------------------------------------------------------------------
@@ -306,10 +306,10 @@ def test_requests_hooks_never_block_outbound_http():
 
 
 def test_apply_tags_survives_config_lookup_failure():
-    from tracenest.integrations.django import view as view_mod
+    from tp_dog.integrations.django import view as view_mod
 
-    tracenest._reset_for_testing()
-    tracenest.init(project_name="tags-fault", disabled=True)
+    tp_dog._reset_for_testing()
+    tp_dog.init(project_name="tags-fault", disabled=True)
 
     original = view_mod._get_config
     view_mod._get_config = _raise_value_error
@@ -329,10 +329,10 @@ def test_apply_tags_survives_config_lookup_failure():
 
 def test_view_dispatch_survives_introspection_failure():
     """A hostile descriptor must not prevent the view from dispatching."""
-    from tracenest.integrations.django import view as view_mod
+    from tp_dog.integrations.django import view as view_mod
 
-    tracenest._reset_for_testing()
-    tracenest.init(project_name="dispatch-fault", disabled=True)
+    tp_dog._reset_for_testing()
+    tp_dog.init(project_name="dispatch-fault", disabled=True)
 
     class HostileView:
         action = "get"
@@ -368,9 +368,9 @@ def _raise_value_error(*args, **kwargs):
 
 def test_server_wrapper_survives_hostile_span_context():
     """A span whose get_span_context() blows up must not block the response."""
-    import tracenest.integrations.django.request as req_mod
+    import tp_dog.integrations.django.request as req_mod
 
-    tracenest.init(project_name="span-context-fault", export_batch=False)
+    tp_dog.init(project_name="span-context-fault", export_batch=False)
 
     class Resp:
         status_code = 200
@@ -404,9 +404,9 @@ def test_server_wrapper_survives_read_only_trace_id():
     rejects the write loses its correlation attrs but keeps the traceparent
     header and, above all, the application response.
     """
-    import tracenest.integrations.django.request as req_mod
+    import tp_dog.integrations.django.request as req_mod
 
-    tracenest.init(project_name="read-only-fault", export_batch=False)
+    tp_dog.init(project_name="read-only-fault", export_batch=False)
 
     class Resp:
         status_code = 200
@@ -455,11 +455,11 @@ def test_server_span_records_exception_exactly_once():
     exception lands on the span twice (and set_status runs twice), which
     double-counts errors in anything reading exception events.
     """
-    import tracenest.integrations.django.request as req_mod
+    import tp_dog.integrations.django.request as req_mod
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="single-exception", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="single-exception", exporter=exporter, export_batch=False)
 
     class Resp:
         status_code = 200
@@ -490,10 +490,10 @@ def test_server_span_records_exception_exactly_once():
 
 def test_django_native_wrapper_rowcount_fault_preserves_result():
     """The ``execute_wrapper`` seam gets its cursor from ``context``, not the instance."""
-    from tracenest.integrations.postgres import cursor as cur
+    from tp_dog.integrations.postgres import cursor as cur
 
-    tracenest._reset_for_testing()
-    tracenest.init(project_name="native-rowcount-fault", disabled=True)
+    tp_dog._reset_for_testing()
+    tp_dog.init(project_name="native-rowcount-fault", disabled=True)
 
     class ClosedCursor:
         @property
@@ -507,7 +507,7 @@ def test_django_native_wrapper_rowcount_fault_preserves_result():
         return "RESULT"
 
     context = {"connection": object(), "cursor": ClosedCursor()}
-    result = cur.tracenest_django_db_execute_wrapper(
+    result = cur.tp_dog_django_db_execute_wrapper(
         execute, "SELECT 1", None, False, context
     )
 
@@ -525,7 +525,7 @@ def test_django_native_wrapper_rowcount_fault_preserves_result():
 
 
 def test_traced_span_preserves_app_exception_when_telemetry_fails():
-    import tracenest.tracing as tracing_mod
+    import tp_dog.tracing as tracing_mod
 
     class HostileSpan:
         """A span whose enrichment blows up, as a broken exporter could."""
@@ -567,7 +567,7 @@ def test_traced_span_preserves_app_exception_when_telemetry_fails():
 
 
 def test_sanitize_sql_dollar_quoted_strings():
-    from tracenest.sanitize import sanitize_sql
+    from tp_dog.sanitize import sanitize_sql
     assert sanitize_sql("SELECT $$alice@example.com$$") == "SELECT ?"
     assert sanitize_sql("SELECT $tag$super_secret$tag$ FROM table") == "SELECT ? FROM table"
     # Unclosed dollar quote fails closed
@@ -576,7 +576,7 @@ def test_sanitize_sql_dollar_quoted_strings():
 
 
 def test_sanitize_url_fail_closed():
-    from tracenest.sanitize import sanitize_url
+    from tp_dog.sanitize import sanitize_url
     # Normal url sanitize strips sensitive query param
     assert "token=REDACTED" in sanitize_url("https://api.example.com/v1?token=secret123")
 
@@ -598,7 +598,7 @@ def test_sanitize_url_fail_closed():
 
 
 def test_normalize_sql_for_metric_collapses_in_clauses():
-    from tracenest.sanitize import normalize_sql_for_metric
+    from tp_dog.sanitize import normalize_sql_for_metric
 
     q1 = "SELECT * FROM users WHERE id IN (%s, %s, %s, %s)"
     assert normalize_sql_for_metric(q1) == "SELECT * FROM users WHERE id IN (?)"
@@ -608,21 +608,21 @@ def test_normalize_sql_for_metric_collapses_in_clauses():
 
 
 def test_normalize_sql_for_metric_collapses_batch_inserts():
-    from tracenest.sanitize import normalize_sql_for_metric
+    from tp_dog.sanitize import normalize_sql_for_metric
 
     q = "INSERT INTO products (name, price) VALUES (%s, %s), (%s, %s), (%s, %s)"
     assert normalize_sql_for_metric(q) == "INSERT INTO products (name, price) VALUES (...)"
 
 
 def test_normalize_sql_for_metric_strips_comments():
-    from tracenest.sanitize import normalize_sql_for_metric
+    from tp_dog.sanitize import normalize_sql_for_metric
 
     q = "SELECT /* route:api/users */ id, name FROM users WHERE id = %s"
     assert normalize_sql_for_metric(q) == "SELECT id, name FROM users WHERE id = %s"
 
 
 def test_normalize_sql_for_metric_bounds_length():
-    from tracenest.sanitize import normalize_sql_for_metric
+    from tp_dog.sanitize import normalize_sql_for_metric
 
     columns = ", ".join([f'"col_{i}"' for i in range(100)])
     long_query = f"SELECT {columns} FROM my_very_large_table WHERE id = %s"
@@ -637,11 +637,11 @@ def test_attempt_getattr_missing_attribute_does_not_log_error(caplog):
     class Dummy:
         pass
 
-    with caplog.at_level(logging.DEBUG, logger="tracenest.safety"):
+    with caplog.at_level(logging.DEBUG, logger="tp_dog.safety"):
         val = attempt(getattr, Dummy(), "nonexistent", default=None, _label="dummy.nonexistent")
     
     assert val is None
-    assert "TraceNest: telemetry step dummy.nonexistent failed" not in caplog.text
+    assert "tp_dog: telemetry step dummy.nonexistent failed" not in caplog.text
 
 
 def test_wrap_application_exception_does_not_log_internal_wrapper_error(caplog):
@@ -659,11 +659,11 @@ def test_wrap_application_exception_does_not_log_internal_wrapper_error(caplog):
     obj = DummyService()
     integ.wrap(obj, "raise_app_error", dummy_wrapper)
 
-    with caplog.at_level(logging.DEBUG, logger="tracenest.integrations"):
+    with caplog.at_level(logging.DEBUG, logger="tp_dog.integrations"):
         with pytest.raises(KeyError, match="missing item"):
             obj.raise_app_error()
 
-    assert "TraceNest internal wrapper error" not in caplog.text
+    assert "tp_dog internal wrapper error" not in caplog.text
     integ.unwrap_all()
 
 

@@ -1,15 +1,15 @@
 
-# TraceNest Observability Stack
+# tp_dog Observability Stack
 
 ## 1. Overview
 
-**TraceNest** is an OpenTelemetry-based observability stack that **replaces
+**tp_dog** is an OpenTelemetry-based observability stack that **replaces
 Datadog APM** with an open, vendor-neutral architecture. It is deployed and in
 active use, not a feasibility exercise.
 
 The stack combines:
 
-* **TraceNest SDK** for application instrumentation
+* **tp_dog SDK** for application instrumentation
 * **OpenTelemetry Collector** for telemetry processing and routing
 * **Grafana Tempo** for distributed trace storage and TraceQL queries
 * **Prometheus** for metrics and time-series analysis
@@ -36,7 +36,7 @@ Traditional APM platforms provide a single integrated experience for:
 * Dashboards
 * Root-cause investigation
 
-TraceNest provides these capabilities using an OpenTelemetry-based architecture rather than relying on a single proprietary APM vendor.
+tp_dog provides these capabilities using an OpenTelemetry-based architecture rather than relying on a single proprietary APM vendor.
 
 The workflow it enables is:
 
@@ -76,7 +76,7 @@ The goal is to move from **"something is slow"** to **"this specific operation c
 ┌──────────────────────────────┐
 │        Django App           │
 │                              │
-│        TraceNest SDK         │
+│        tp_dog SDK         │
 │                              │
 │ Django / PostgreSQL / Redis  │
 │ HTTP / Boto3 / custom spans  │
@@ -128,7 +128,7 @@ Detailed architecture is documented in [`Architecture.md`](Architecture.md).
 
 | Component                   | Responsibility                                                               |
 | --------------------------- | ---------------------------------------------------------------------------- |
-| **TraceNest SDK**           | Instruments application operations and generates OpenTelemetry spans         |
+| **tp_dog SDK**           | Instruments application operations and generates OpenTelemetry spans         |
 | **OpenTelemetry Collector** | Receives, batches, processes, and routes telemetry                           |
 | **Spanmetrics**             | Derives RED metrics from trace spans                                         |
 | **Grafana Tempo**           | Stores and queries distributed traces                                        |
@@ -142,7 +142,7 @@ Application
     │
     │ Spans
     ▼
-TraceNest SDK
+tp_dog SDK
     │
     │ OTLP
     ▼
@@ -167,21 +167,21 @@ Tempo + Prometheus
 
 ---
 
-## 5. TraceNest SDK
+## 5. tp_dog SDK
 
-TraceNest is responsible for application-side instrumentation.
+tp_dog is responsible for application-side instrumentation.
 
 The SDK uses automatic instrumentation so applications can be observed without manually adding tracing code to every operation.
 
 Calling:
 
 ```python
-tracenest.init()
+tp_dog.init()
 ```
 
 discovers supported integrations and applies runtime instrumentation.
 
-TraceNest provides instrumentation for:
+tp_dog provides instrumentation for:
 
 * Django
 * PostgreSQL (`psycopg2`, via Django cursors and the upstream instrumentor)
@@ -286,7 +286,7 @@ AWS operations can be represented as dependency spans containing service, operat
 
 ## 8. Metrics
 
-TraceNest derives application RED metrics directly from trace spans using the Collector's `spanmetrics` connector.
+tp_dog derives application RED metrics directly from trace spans using the Collector's `spanmetrics` connector.
 
 The primary metrics include:
 
@@ -329,7 +329,7 @@ Traces answer:
 
 > **Why is it happening?**
 
-TraceNest connects the two through Prometheus exemplars.
+tp_dog connects the two through Prometheus exemplars.
 
 The intended investigation path is:
 
@@ -373,10 +373,10 @@ automatically adds a row to the Service Catalog.
 The dashboard hierarchy moves from high-level health toward detailed diagnosis:
 
 ```text
-Needs Attention            tracenest-needs-attention
+Needs Attention            tp_dog-needs-attention
        │  severity counters + detected-issue cards
        ▼
-Service Catalog            tracenest-project-catalog
+Service Catalog            tp_dog-project-catalog
        │  auto-detected services, throughput, % time by downstream
        │  (one row per service, each linking to…)
        ▼
@@ -527,18 +527,18 @@ The reasoning behind these decisions and their trade-offs is documented in [`Dec
 Capturing every trace at high traffic volumes is expensive, so sampling is
 configured per service rather than left at 100%.
 
-TraceNest supports sampling strategies such as:
+tp_dog supports sampling strategies such as:
 
 * Head-based sampling
 * Parent-based sampling
 
-Sampling is deliberately **head-based only**, applied in the SDK (`tracenest.sampler`).
+Sampling is deliberately **head-based only**, applied in the SDK (`tp_dog.sampler`).
 
 The Collector receives the SDK's sampled trace population, derives RED metrics
 from it, and writes it to Tempo. Configure the head sample rate per service
-with `TRACENEST_SAMPLE_RATE`, and keep specific routes pinned to `1.0` with
-`TRACENEST_ENDPOINT_SAMPLE_RULES` (or drop noisy ones with
-`TRACENEST_IGNORE_ENDPOINTS`).
+with `TP_DOG_SAMPLE_RATE`, and keep specific routes pinned to `1.0` with
+`TP_DOG_ENDPOINT_SAMPLE_RULES` (or drop noisy ones with
+`TP_DOG_IGNORE_ENDPOINTS`).
 
 Because RED metrics are derived from the **sampled** population, lowering the
 sample rate lowers metric fidelity as well as trace volume. Force error routes
@@ -570,7 +570,7 @@ The stack covers:
 
 ## 17. Current Limitations and Operational Debts
 
-TraceNest is deployed and operational, but it is not feature-complete against a
+tp_dog is deployed and operational, but it is not feature-complete against a
 commercial APM. The following are known and accepted:
 
 ### Deliberate scope boundaries
@@ -623,7 +623,7 @@ The detailed documentation is split by concern:
 | [`Basics.md`](Basics.md)                                       | Observability and OpenTelemetry fundamentals         |
 | [`Architecture.md`](Architecture.md)                           | System architecture and component configuration      |
 | [`Components.md`](Components.md)                               | Supported integrations and captured telemetry        |
-| [`How_instrumentation_works.md`](How_instrumentation_works.md) | Internal TraceNest instrumentation mechanics         |
+| [`How_instrumentation_works.md`](How_instrumentation_works.md) | Internal tp_dog instrumentation mechanics         |
 | [`Custom_instrumentation.md`](Custom_instrumentation.md)       | Creating new integrations and manual instrumentation |
 | [`Dashboards.md`](Dashboards.md)                               | Grafana dashboards and investigation workflow        |
 | [`Decisions.md`](Decisions.md)                                 | Architectural decisions and trade-offs               |
@@ -633,17 +633,17 @@ The detailed documentation is split by concern:
 
 ## 19. Summary
 
-The TraceNest stack provides an end-to-end observability architecture based on OpenTelemetry:
+The tp_dog stack provides an end-to-end observability architecture based on OpenTelemetry:
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
-│                    TraceNest Observability                  │
+│                    tp_dog Observability                  │
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
 │ Application                                                │
 │    │                                                       │
 │    ▼                                                       │
-│ TraceNest SDK                                              │
+│ tp_dog SDK                                              │
 │    │                                                       │
 │    ▼                                                       │
 │ OpenTelemetry Collector                                    │
@@ -663,7 +663,7 @@ The architecture provides a unified workflow:
 
 Metrics provide the high-level operational view, while distributed traces provide the detailed execution path needed for root-cause analysis.
 
-TraceNest provides the core building blocks of an OpenTelemetry-based APM
+tp_dog provides the core building blocks of an OpenTelemetry-based APM
 platform: instrumented Django request waterfalls, collector-derived RED
 metrics, and a metrics-to-trace investigation path. The remaining work is
 operational — capacity, retention, self-monitoring, and alerting — rather than

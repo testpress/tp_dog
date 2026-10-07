@@ -10,8 +10,8 @@ from django.urls import path, clear_url_caches
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind, StatusCode
 
-import tracenest
-from tracenest.integrations.django import DjangoIntegration
+import tp_dog
+from tp_dog.integrations.django import DjangoIntegration
 
 if not settings.configured:
     settings.configure(
@@ -82,7 +82,7 @@ route_observations = []
 
 def route_probe_view(request):
     """Records the route published to child spans while the request is in flight."""
-    from tracenest.route_context import get_current_route
+    from tp_dog.route_context import get_current_route
 
     route_observations.append(get_current_route())
     return HttpResponse("probe")
@@ -104,13 +104,13 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def clean():
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     from django.conf import settings as s
 
     original_urlconf = s.ROOT_URLCONF
     s.ROOT_URLCONF = __name__
     clear_url_caches()
-    from tracenest.integrations import get_integration_manager
+    from tp_dog.integrations import get_integration_manager
 
     mgr = get_integration_manager()
     # Ensure django is instrumented via manager so reset can clean it
@@ -120,13 +120,13 @@ def clean():
         mgr.uninstrument_all()
     except Exception:
         pass
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     s.ROOT_URLCONF = original_urlconf
     clear_url_caches()
 
 
 def _make_handler(exporter):
-    tracenest.init(project_name="adv-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="adv-test", exporter=exporter, export_batch=False)
     from django.core.handlers.wsgi import WSGIHandler
 
     h = WSGIHandler()
@@ -253,7 +253,7 @@ def test_route_resolution_honors_per_request_urlconf():
     ROOT_URLCONF, so every request to a middleware-scoped URLconf reports
     __unmatched__ until resolver_match becomes available after the handler.
     """
-    from tracenest.integrations.django.request import _preresolve_route
+    from tp_dog.integrations.django.request import _preresolve_route
     import django.urls as django_urls
 
     scoped_urlconf = object()  # stand-in for a middleware-installed URLconf
@@ -276,7 +276,7 @@ def test_route_resolution_honors_per_request_urlconf():
 
 def test_regex_route_pattern_cleaning():
     r"""Verify legacy regex patterns like ^admin/courses/(?P<slug>[\w-]+)/$ are converted to clean templates."""
-    from tracenest.integrations.django.request import _clean_regex_pattern
+    from tp_dog.integrations.django.request import _clean_regex_pattern
 
     raw = r"^admin/courses/(?P<course_slug>[\w-]+)/(?P<slug>[\w-]+)/$"
     cleaned = _clean_regex_pattern(raw)
@@ -306,7 +306,7 @@ def test_repeated_instrumentation_no_double_wrap():
     exporter = InMemorySpanExporter()
     # First instrument already done by fixture; test second on same instance is no-op
     # Create new standalone integration and instrument twice
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     from django.conf import settings as s
 
     s.ROOT_URLCONF = __name__
@@ -315,7 +315,7 @@ def test_repeated_instrumentation_no_double_wrap():
     assert i.instrument() is True
     assert i.instrument() is True  # second no-op
     # Now init and make handler
-    tracenest.init(project_name="repeat-test", exporter=exporter, export_batch=False, auto_patch=False)
+    tp_dog.init(project_name="repeat-test", exporter=exporter, export_batch=False, auto_patch=False)
     from django.core.handlers.wsgi import WSGIHandler
 
     h = WSGIHandler()
@@ -330,7 +330,7 @@ def test_repeated_instrumentation_no_double_wrap():
     assert len(mw_call_spans) == 2, f"double wrap produced duplicate call spans: {[s.name for s in mw_call_spans]}"
     assert len(mw_req_spans) == 2, f"double wrap produced duplicate request spans: {[s.name for s in mw_req_spans]}"
     i.uninstrument()
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
 
 
 def test_uninstrument_restores():
@@ -344,16 +344,16 @@ def test_uninstrument_restores():
 
     # The fixture already did instrument + init, so we need to re-init with new exporter
     # First clear and re-init with new exporter
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     from django.conf import settings as s
 
     s.ROOT_URLCONF = __name__
     clear_url_caches()
-    from tracenest.integrations import get_integration_manager
+    from tp_dog.integrations import get_integration_manager
 
     mgr = get_integration_manager()
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="uninstrument-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="uninstrument-test", exporter=exporter, export_batch=False)
     assert mgr.apply_integrations()  # re-instrument
     h = WSGIHandler()
     h.load_middleware()
@@ -375,13 +375,13 @@ def test_uninstrument_restores():
     # After uninstrument, no django spans should be created (only 0)
     assert len([s for s in spans2 if s.kind == SpanKind.SERVER]) == 0
     # Cleanup: re-instrument for remaining tests via fixture teardown will handle
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
 
 
 def test_nested_template_includes_enabled_by_default():
     """Verify nested/included templates are captured by default matching Datadog behavior."""
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="django-template-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="django-template-test", exporter=exporter, export_batch=False)
 
     from django.template import Engine
 
@@ -417,7 +417,7 @@ def test_nested_template_includes_enabled_by_default():
 def test_nested_template_suppression_opt_out():
     """Verify nested/included templates can be suppressed via trace_nested_templates=False."""
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="django-template-test", exporter=exporter, export_batch=False, trace_nested_templates=False)
+    tp_dog.init(project_name="django-template-test", exporter=exporter, export_batch=False, trace_nested_templates=False)
 
     from django.template import Engine
 
@@ -452,7 +452,7 @@ def test_nested_template_suppression_opt_out():
 def test_multipart_template_error_waterfall():
     """Verify multi-part template rendering."""
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="django-template-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="django-template-test", exporter=exporter, export_batch=False)
 
     from django.template import Engine
 
@@ -512,7 +512,7 @@ def test_multipart_template_error_waterfall():
 def test_template_pattern_exclusion():
     """Verify templates matching exclude patterns (e.g. django/forms/*, */widgets/*) are skipped."""
     exporter = InMemorySpanExporter()
-    tracenest.init(
+    tp_dog.init(
         project_name="django-template-exclude-test",
         exporter=exporter,
         export_batch=False,
@@ -569,7 +569,7 @@ def test_template_pattern_exclusion():
 
 
 def test_regex_route_normalization():
-    from tracenest.integrations.django.request import _normalize_route
+    from tp_dog.integrations.django.request import _normalize_route
 
     class MockResolverMatch:
         def __init__(self, route):
@@ -594,10 +594,10 @@ def test_datadog_style_middleware_waterfall():
     """Verify that class middleware with __call__ and process_request creates nested waterfall spans."""
     from django.core.handlers.wsgi import WSGIHandler
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    import tracenest
+    import tp_dog
 
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="dd-waterfall-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="dd-waterfall-test", exporter=exporter, export_batch=False)
 
     # Test with configured middlewares (SecurityMiddleware and CommonMiddleware)
     h = WSGIHandler()
@@ -628,12 +628,12 @@ def test_view_cbv_multilevel_nesting():
     """Verify multi-level nesting of CBVs: view -> View.setup -> dispatch -> get."""
     from django.core.handlers.wsgi import WSGIHandler
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    import tracenest
-    from tracenest.integrations import get_integration_manager
+    import tp_dog
+    from tp_dog.integrations import get_integration_manager
 
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="cbv-multilevel-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="cbv-multilevel-test", exporter=exporter, export_batch=False)
     get_integration_manager().apply_integrations()
 
     h = WSGIHandler()
@@ -664,12 +664,12 @@ def test_drf_viewset_action_tracing():
     """Verify DRF ViewSet action routing maps action to handler span name (e.g. fake_view_set.list)."""
     from django.core.handlers.wsgi import WSGIHandler
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    import tracenest
-    from tracenest.integrations import get_integration_manager
+    import tp_dog
+    from tp_dog.integrations import get_integration_manager
 
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="viewset-action-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="viewset-action-test", exporter=exporter, export_batch=False)
     get_integration_manager().apply_integrations()
 
     h = WSGIHandler()
@@ -702,7 +702,7 @@ def test_template_query_nesting_waterfall():
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
     from django.template import Template, Context
     from django.db.backends.utils import CursorWrapper
-    import tracenest
+    import tp_dog
 
     class _MockRawCursor:
         def __init__(self, rowcount=2):
@@ -724,10 +724,10 @@ def test_template_query_nesting_waterfall():
         def validate_no_broken_transaction(self):
             pass
 
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="template-nesting-test", exporter=exporter, export_batch=False)
-    from tracenest.integrations import get_integration_manager
+    tp_dog.init(project_name="template-nesting-test", exporter=exporter, export_batch=False)
+    from tp_dog.integrations import get_integration_manager
     mgr = get_integration_manager()
     mgr.apply_integrations()
 
@@ -764,7 +764,7 @@ def test_concurrent_template_rendering_thread_safety():
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="template-thread-safety-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="template-thread-safety-test", exporter=exporter, export_batch=False)
 
     shared_template = Template("<div>Hello {{ name }}</div>")
     shared_template.name = "shared/greeting.html"
@@ -796,7 +796,7 @@ def test_traceparent_header_respects_sampling_decision():
 
     # 1. Sampled request (sample_rate=1.0) -> trace_flags should be 01
     exporter1 = InMemorySpanExporter()
-    tracenest.init(project_name="sample-test-on", exporter=exporter1, sample_rate=1.0, export_batch=False)
+    tp_dog.init(project_name="sample-test-on", exporter=exporter1, sample_rate=1.0, export_batch=False)
     handler = WSGIHandler()
     handler.load_middleware()
     req1 = factory.get("/test/sample/")
@@ -806,11 +806,11 @@ def test_traceparent_header_respects_sampling_decision():
     flags1 = int(res1["traceparent"].split("-")[-1], 16)
     assert flags1 & 1 == 1, f"Expected sampled flag bit 1 to be set, got {res1['traceparent']}"
 
-    tracenest._reset_for_testing()
+    tp_dog._reset_for_testing()
 
     # 2. Dropped request (sample_rate=0.0) -> trace_flags bit 0 should be 0 (unsampled)
     exporter2 = InMemorySpanExporter()
-    tracenest.init(project_name="sample-test-off", exporter=exporter2, sample_rate=0.0, export_batch=False)
+    tp_dog.init(project_name="sample-test-off", exporter=exporter2, sample_rate=0.0, export_batch=False)
     handler2 = WSGIHandler()
     handler2.load_middleware()
     req2 = factory.get("/test/sample/")
@@ -823,10 +823,10 @@ def test_traceparent_header_respects_sampling_decision():
 
 def test_drf_view_dispatch_reentrancy_single_span():
     """Verify that nested dispatch calls (e.g. DRF APIView calling super().dispatch) emit only 1 dispatch span."""
-    from tracenest.integrations.django.view import traced_view_dispatch
+    from tp_dog.integrations.django.view import traced_view_dispatch
 
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="dispatch-reentrant-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="dispatch-reentrant-test", exporter=exporter, export_batch=False)
 
     class ParentView(View):
         def dispatch(self, request, *args, **kwargs):
@@ -853,11 +853,11 @@ def test_drf_view_dispatch_reentrancy_single_span():
 
 def test_unmatched_route_does_not_poison_child_spans():
     """Verify that unresolvable routes never publish __unmatched__ to current_route or child spans."""
-    from tracenest.route_context import get_current_route
-    from tracenest.integrations.django.request import traced_get_response
+    from tp_dog.route_context import get_current_route
+    from tp_dog.integrations.django.request import traced_get_response
 
     exporter = InMemorySpanExporter()
-    tracenest.init(project_name="unmatched-poison-test", exporter=exporter, export_batch=False)
+    tp_dog.init(project_name="unmatched-poison-test", exporter=exporter, export_batch=False)
 
     factory = RequestFactory()
     req = factory.get("/non-existent/random/path/")
@@ -867,7 +867,7 @@ def test_unmatched_route_does_not_poison_child_spans():
     def dummy_handler(request):
         # In-flight child span check
         observed_routes.append(get_current_route())
-        with tracenest.traced_span("child.db.query"):
+        with tp_dog.traced_span("child.db.query"):
             pass
         return HttpResponse("not found", status=404)
 
@@ -884,7 +884,72 @@ def test_unmatched_route_does_not_poison_child_spans():
     )
 
 
+def test_route_enriching_span_processor_on_end_normalizes_readable_span():
+    """Verify RouteEnrichingSpanProcessor.on_end mutates ReadableSpan._attributes directly."""
+    from tp_dog.route_context import RouteEnrichingSpanProcessor
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    processor = RouteEnrichingSpanProcessor()
+    provider.add_span_processor(processor)
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    tracer = provider.get_tracer("test")
+    with tracer.start_as_current_span("unnormalized_span") as span:
+        span.set_attribute("db.system", "postgresql")
+        span.set_attribute("db.statement", "SELECT * FROM auth_user")
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    finished = spans[0]
+    assert finished.attributes.get("normalized.service") == "postgres"
+    assert finished.attributes.get("normalized.operation") == "SELECT * FROM auth_user"
 
 
 
 
+
+
+
+
+
+def test_institute_subdomain_propagated_to_child_spans():
+    """Verify institute.subdomain set during request is propagated to all child spans."""
+    from django.test import RequestFactory
+    from django.http import HttpResponse
+    from tp_dog.integrations.django.request import traced_get_response
+    import tp_dog
+
+    class DummyInstitute:
+        subdomain = "demo"
+
+    exporter = InMemorySpanExporter()
+    tp_dog.init(project_name="institute-test", exporter=exporter, export_batch=False)
+
+    factory = RequestFactory()
+    req = factory.get("/api/v3/featured-updates/")
+    req.institute = DummyInstitute()
+
+    def dummy_handler(request):
+        with tp_dog.traced_span("child.db.query"):
+            pass
+        with tp_dog.traced_span("child.redis.cmd"):
+            pass
+        return HttpResponse("ok", status=200)
+
+    resp = traced_get_response(dummy_handler, None, (req,), {})
+    assert resp.status_code == 200
+
+    spans = exporter.get_finished_spans()
+    db_span = next(s for s in spans if s.name == "child.db.query")
+    redis_span = next(s for s in spans if s.name == "child.redis.cmd")
+    server_span = next(s for s in spans if s.kind == SpanKind.SERVER)
+
+    assert db_span.attributes.get("institute.subdomain") == "demo"
+    assert db_span.attributes.get("institute") == "demo"
+    assert redis_span.attributes.get("institute.subdomain") == "demo"
+    assert redis_span.attributes.get("institute") == "demo"
+    assert server_span.attributes.get("institute.subdomain") == "demo"
+    assert server_span.attributes.get("institute") == "demo"

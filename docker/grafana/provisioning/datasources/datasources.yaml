@@ -24,7 +24,7 @@ datasources:
       defaultQueryType: search
       tracesToMetrics:
         datasourceUid: prometheus
-        tags: [{ key: 'service.name', value: 'service' }, { key: 'job' }]
+        tags: [{ key: 'service.name', value: 'project_name' }, { key: 'job' }]
         queries:
           - name: 'Throughput'
             query: 'sum(rate(apm_calls_total{$$__tags}[$$__rate_interval]))'

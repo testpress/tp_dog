@@ -1,4 +1,4 @@
-# TraceNest Staging Deployment Guide
+# tp_dog Staging Deployment Guide
 ### testpress_python → OTEL Collector → Tempo → Prometheus → Grafana
 
 ---
@@ -10,7 +10,7 @@
 │              APP SERVER                      │
 │                                             │
 │  Django (bare metal / Gunicorn)             │
-│  + tracenest SDK (pip installed)            │
+│  + tp_dog SDK (pip installed)            │
 │       │ OTLP HTTP :4318 (localhost)         │
 │       ▼                                     │
 │  OTEL Collector  (Docker sidecar)           │
@@ -31,18 +31,18 @@
 
 ## 1. App Server Changes
 
-### 1a. Install TraceNest SDK
+### 1a. Install tp_dog SDK
 
 ```bash
-pip install tracenest
+pip install tp_dog
 
 # Add to your requirements file
-echo "tracenest" >> requirements/production.txt
+echo "tp_dog" >> requirements/production.txt
 ```
 
 ---
 
-### 1b. Add `tracenest.init()` to `staging.py`
+### 1b. Add `tp_dog.init()` to `staging.py`
 
 **File:** `testpress/testpress/settings/staging.py`
 
@@ -63,10 +63,10 @@ echo "tracenest" >> requirements/production.txt
       traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
   )
 
-+ # ── TraceNest OpenTelemetry ──────────────────────────────────────────────
++ # ── tp_dog OpenTelemetry ──────────────────────────────────────────────
 + try:
-+     import tracenest
-+     tracenest.init(
++     import tp_dog
++     tp_dog.init(
 +         project_name="testpress",
 +         cluster_name="staging",
 +         sample_rate=1.0,
@@ -79,7 +79,7 @@ echo "tracenest" >> requirements/production.txt
 ```
 
 > **Why `try/except`?** Sentry can do it bare because it's confirmed installed.
-> Until tracenest is in your requirements and deployed, this guard ensures
+> Until tp_dog is in your requirements and deployed, this guard ensures
 > Django won't fail to start if the package is missing.
 
 ---
@@ -110,7 +110,7 @@ timeout = 30
 preload_app = True
 ```
 
-> **Note on `preload_app = True`**: Modern OpenTelemetry SDK and TraceNest handle Gunicorn worker forks natively without requiring any manual `post_fork` hooks. You can safely keep `preload_app = True` exactly as used in production.
+> **Note on `preload_app = True`**: Modern OpenTelemetry SDK and tp_dog handle Gunicorn worker forks natively without requiring any manual `post_fork` hooks. You can safely keep `preload_app = True` exactly as used in production.
 
 Start gunicorn with:
 ```bash
@@ -242,7 +242,7 @@ Only ensure: **port `4317` is open** on the Tempo server firewall to accept from
 
 | File | What Changes |
 |------|-------------|
-| `settings/staging.py` | Add `tracenest.init()` block after sentry |
+| `settings/staging.py` | Add `tp_dog.init()` block after sentry |
 | `.envs/.env` | Add `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` |
 | `scripts/gunicorn_conf_staging.py` | New file with `preload_app = True` (matches production) |
 | `docker-compose.otel.yml` | New file — OTEL Collector sidecar on App Server |
@@ -269,9 +269,9 @@ Only ensure: **port `4317` is open** on the Tempo server firewall to accept from
 
 ## Pre-Staging Checklist
 
-- [ ] `pip install tracenest` on the App Server
-- [ ] Add `tracenest` to requirements file
-- [ ] Add `tracenest.init()` block to `staging.py`
+- [ ] `pip install tp_dog` on the App Server
+- [ ] Add `tp_dog` to requirements file
+- [ ] Add `tp_dog.init()` block to `staging.py`
 - [ ] Add `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` to `.envs/.env`
 - [ ] Create `scripts/gunicorn_conf_staging.py` with `preload_app = True` (matches production)
 - [ ] Create `docker-compose.otel.yml` and start the OTEL Collector sidecar

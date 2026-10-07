@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# generate_all_traffic.sh — Universal Multi-App Traffic Generator for Tracenest APM
+# generate_all_traffic.sh — Universal Multi-App Traffic Generator for tp_dog APM
 # ==============================================================================
 # Generates realistic, concurrent traffic across apps:
 #   1. Django Full App (Port 8001)   — Django + Postgres (Primary & Replicas) + Redis + External API
@@ -117,7 +117,7 @@ send_req() {
 }
 
 echo -e "${C_BOLD}================================================================${C_RESET}"
-echo -e "${C_BOLD}         TRACENEST APM — UNIVERSAL MULTI-APP TRAFFIC            ${C_RESET}"
+echo -e "${C_BOLD}         TP_DOG APM — UNIVERSAL MULTI-APP TRAFFIC            ${C_RESET}"
 echo -e "${C_BOLD}================================================================${C_RESET}"
 echo -e "  Target 1: Django Full (Postgres + Redis) : ${DJANGO_FULL_URL}"
 echo -e "  Target 2: Django Lite (Zero DB)          : ${DJANGO_LITE_URL}"

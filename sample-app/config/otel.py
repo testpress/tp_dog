@@ -1,6 +1,6 @@
-"""TraceNest OpenTelemetry bootstrap for the Django POC sample app.
+"""tp_dog OpenTelemetry bootstrap for the Django POC sample app.
 
-Initializes the TraceNest SDK with a single init() call. When auto_patch=True
+Initializes the tp_dog SDK with a single init() call. When auto_patch=True
 (the default), all installed integrations (Django, PostgreSQL, Redis, etc.)
 are automatically detected and patched.
 
@@ -13,23 +13,23 @@ logger = logging.getLogger("config.otel")
 
 
 def setup_telemetry():
-    """Initialize TraceNest with auto-patching. Idempotent, fail-safe."""
-    if os.environ.get("TRACENEST_DISABLED", "").lower() in ("1", "true", "yes"):
-        logger.info("TraceNest disabled via TRACENEST_DISABLED")
+    """Initialize tp_dog with auto-patching. Idempotent, fail-safe."""
+    if os.environ.get("TP_DOG_DISABLED", "").lower() in ("1", "true", "yes"):
+        logger.info("tp_dog disabled via TP_DOG_DISABLED")
         return False
     try:
-        import tracenest
+        import tp_dog
     except ImportError:
-        logger.info("TraceNest not installed; observability disabled")
+        logger.info("tp_dog not installed; observability disabled")
         return False
     try:
         # Minimal init — auto_patch=True (default) detects all installed integrations.
-        # Service name, environment, endpoint all resolve from env vars:
-        #   TRACENEST_SERVICE_NAME / OTEL_SERVICE_NAME
-        #   TRACENEST_ENVIRONMENT / OTEL_ENVIRONMENT
-        #   TRACENEST_ENDPOINT / OTEL_EXPORTER_OTLP_ENDPOINT
+        # Project (application) name, environment, endpoint resolve from env vars:
+        #   TP_DOG_PROJECT_NAME / OTEL_SERVICE_NAME
+        #   TP_DOG_ENVIRONMENT / OTEL_ENVIRONMENT
+        #   TP_DOG_ENDPOINT / OTEL_EXPORTER_OTLP_ENDPOINT
         # Or auto-detected from Django settings if configured there.
-        tracenest.init(
+        tp_dog.init(
             project_name="otel-sample",
             cluster_name="Dummy",
             tags={
@@ -43,8 +43,8 @@ def setup_telemetry():
                 "/api/multi-db/" : 0
             },
         )
-        logger.info("TraceNest initialized with auto-patching")
+        logger.info("tp_dog initialized with auto-patching")
         return True
     except Exception:
-        logger.exception("TraceNest initialization failed; continuing without observability")
+        logger.exception("tp_dog initialization failed; continuing without observability")
         return False

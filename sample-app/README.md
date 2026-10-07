@@ -1,6 +1,6 @@
-# Sample Django Application (TraceNest Demo)
+# Sample Django Application (tp_dog Demo)
 
-This is the reference Django demonstration application instrumented with the **TraceNest OpenTelemetry SDK**. It provides endpoints that exercise PostgreSQL (primary and read replicas), PgBouncer connection pooling, Redis caching & pipelines, external HTTP calls, AWS S3/MinIO storage, and error scenarios.
+This is the reference Django demonstration application instrumented with the **tp_dog OpenTelemetry SDK**. It provides endpoints that exercise PostgreSQL (primary and read replicas), PgBouncer connection pooling, Redis caching & pipelines, external HTTP calls, AWS S3/MinIO storage, and error scenarios.
 
 ---
 
@@ -13,7 +13,7 @@ This is the reference Django demonstration application instrumented with the **T
                    └──────┬──────┘
                           │
                    ┌──────▼──────┐
-                   │   Django    │ (TraceNest SDK auto-instruments)
+                   │   Django    │ (tp_dog SDK auto-instruments)
                    └──────┬──────┘
         ┌─────────────┼─────────────┬─────────────┬─────────────┐
         │             │             │             │             │
@@ -63,15 +63,15 @@ Access the services:
 
 ---
 
-## How TraceNest is Integrated
+## How tp_dog is Integrated
 
 Telemetry is initialized once in `config/settings.py` by calling `setup_telemetry()` from `config/otel.py`:
 
 ```python
 # config/otel.py
-import tracenest
+import tp_dog
 
-tracenest.init(
+tp_dog.init(
     project_name="otel-sample",
     cluster_name="demo-cluster",
     tags={
@@ -82,7 +82,7 @@ tracenest.init(
 )
 ```
 
-Because `auto_patch=True` is the default, TraceNest automatically hooks:
+Because `auto_patch=True` is the default, tp_dog automatically hooks:
 * **Django**: Inbound HTTP requests, view execution, middleware, and templates.
 * **PostgreSQL (`psycopg2`)**: Cursor queries, sanitized SQL, and PgBouncer connection identification.
 * **Redis (`django_redis` / `redis-py`)**: Cache operations and pipeline executions.

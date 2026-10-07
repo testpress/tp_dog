@@ -1,6 +1,6 @@
-# TraceNest — Decision Log
+# tp_dog — Decision Log
 
-This document records the key technical decisions behind the TraceNest observability stack and the reasoning behind them.
+This document records the key technical decisions behind the tp_dog observability stack and the reasoning behind them.
 
 Each decision captures **what was chosen, why it was chosen, and the trade-offs introduced**.
 
@@ -10,7 +10,7 @@ Each decision captures **what was chosen, why it was chosen, and the trade-offs 
 
 **Why?**
 
-OpenTelemetry provides vendor-neutral APIs, SDKs, telemetry formats, and context propagation. TraceNest uses OTLP for telemetry transport and W3C Trace Context for distributed tracing.
+OpenTelemetry provides vendor-neutral APIs, SDKs, telemetry formats, and context propagation. tp_dog uses OTLP for telemetry transport and W3C Trace Context for distributed tracing.
 
 This keeps the instrumentation layer independent from the backend. The same telemetry can be routed to systems such as Tempo, Jaeger, or other OTLP-compatible backends without rewriting application instrumentation.
 
@@ -23,7 +23,7 @@ OpenTelemetry introduces additional infrastructure and requires us to follow its
 
 **Why?**
 
-The standard instrumentation provides basic Django tracing, but TraceNest requires deeper application visibility.
+The standard instrumentation provides basic Django tracing, but tp_dog requires deeper application visibility.
 
 Custom instrumentation allows us to capture:
 
@@ -153,17 +153,17 @@ Database performance needs to be analyzed by topology.
 
 A slow query against a read replica has a different investigation path from a slow query against the primary database.
 
-TraceNest therefore attaches database-role information to database spans where it can be determined reliably.
+tp_dog therefore attaches database-role information to database spans where it can be determined reliably.
 
 **How We Detect It:**
 1. **Alias & Map Heuristics**: Role is resolved from the Django database connection alias alone, in this precedence order:
-   - An exact match in `db_role_map` (`TRACENEST_DB_ROLE_MAP`).
+   - An exact match in `db_role_map` (`TP_DOG_DB_ROLE_MAP`).
    - A case-insensitive match in `db_role_map`.
    - A pattern match on the alias (`replica`, `slave`, `readonly`, `read`, optionally suffixed with digits or `db`).
    - Otherwise `primary`.
 
    Host and port are **not** consulted for role. If your alias naming does not
-   signal topology, set `TRACENEST_DB_ROLE_MAP` explicitly.
+   signal topology, set `TP_DOG_DB_ROLE_MAP` explicitly.
 2. **Explicit Span Attribution**: Emits `db.role` (`primary` or `replica`) on client database spans.
 3. **Multi-DB Routing Parity**: Supports Django multi-database routing topologies. A single CLIENT span carries both the connection alias (`peer.service`) and the physical database it resolved to (`db.name`), so routing is attributable without a second parent span.
 
@@ -240,7 +240,7 @@ The instrumentation remains dependent on the behavior of the underlying HTTP cli
 
 **Why?**
 
-AWS operations need to appear as dependency spans, but TraceNest does not require a custom AWS telemetry engine.
+AWS operations need to appear as dependency spans, but tp_dog does not require a custom AWS telemetry engine.
 
 The integration captures useful information such as:
 
@@ -300,7 +300,7 @@ If the Collector is unavailable because of:
 
 the application should continue processing requests.
 
-TraceNest therefore wraps telemetry export with failure handling.
+tp_dog therefore wraps telemetry export with failure handling.
 
 **Trade-off:**
 Isolation means telemetry can be lost when the telemetry pipeline is unavailable. Reliability and loss behavior must therefore be measured separately.
@@ -371,7 +371,7 @@ This requires consistent configuration between the metrics system, Grafana, and 
 
 Sensitive data must be removed at the point of origin rather than relying on downstream collection layers.
 
-TraceNest applies sanitization before telemetry is exported:
+tp_dog applies sanitization before telemetry is exported:
 
 * **SQL Queries**: Replaces numerical literals, string constants, and UUIDs with `%s` parameters to protect customer data and normalize query summaries.
 * **URLs**: Strips basic-auth credentials and sensitive URL query tokens.
@@ -402,7 +402,7 @@ Traces serve as the primary diagnostic signal for root-cause analysis (answering
 
 **Why?**
 
-TraceNest is the deployed APM system, not a feasibility exercise. That makes its
+tp_dog is the deployed APM system, not a feasibility exercise. That makes its
 cost profile and failure modes production concerns rather than validation
 outcomes, and it means the following are standing operational responsibilities
 rather than pre-adoption checks:
@@ -414,8 +414,8 @@ rather than pre-adoption checks:
   container limit, so raising traffic requires re-tuning the limiter, queue
   depth, and `GOMEMLIMIT` together.
 * **Sampling policy** — head-based sampling is per-service via
-  `TRACENEST_SAMPLE_RATE`, with per-route overrides through
-  `TRACENEST_ENDPOINT_SAMPLE_RULES`. Because the Collector derives RED metrics
+  `TP_DOG_SAMPLE_RATE`, with per-route overrides through
+  `TP_DOG_ENDPOINT_SAMPLE_RULES`. Because the Collector derives RED metrics
   from the *sampled* population, dropping the sample rate also drops metric
   fidelity. Errors should be forced to `1.0` rather than sampled down.
 * **Storage sizing** — Tempo `block_retention` (currently 14 days) and the

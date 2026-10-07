@@ -1,6 +1,6 @@
 """Standalone Pure Django Application (Zero Postgres, Zero Redis).
 
-Instrumented with TraceNest OpenTelemetry SDK to demonstrate that the
+Instrumented with tp_dog OpenTelemetry SDK to demonstrate that the
 catalog and overview dashboards dynamically display ONLY Django when no
 downstream databases or caches are used.
 """
@@ -12,12 +12,12 @@ from django.conf import settings
 from django.http import JsonResponse, HttpResponseServerError
 from django.urls import path
 from django.core.wsgi import get_wsgi_application
-import tracenest
+import tp_dog
 
-# 1. Initialize TraceNest SDK (auto_patch=True is the default)
-tracenest.init(
-    project_name=os.getenv("TRACENEST_PROJECT_NAME", "django-lite-app"),
-    cluster_name=os.getenv("TRACENEST_CLUSTER_NAME", "done"),
+# 1. Initialize tp_dog SDK (auto_patch=True is the default)
+tp_dog.init(
+    project_name=os.getenv("TP_DOG_PROJECT_NAME", "django-lite-app"),
+    cluster_name=os.getenv("TP_DOG_CLUSTER_NAME", "done"),
     tags={
         "server_location": "ap-south-1",
         "team": "frontend-api",
@@ -25,7 +25,7 @@ tracenest.init(
         "test_1": 1111,
         
     },
-    environment=os.getenv("TRACENEST_ENVIRONMENT", "production"),
+    environment=os.getenv("TP_DOG_ENVIRONMENT", "production"),
     endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tp-otel-collector:4318"),
 )
 

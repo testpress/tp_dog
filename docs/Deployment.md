@@ -1,6 +1,6 @@
 # Production Deployment
 
-Split deployment for TraceNest: the application, SDK and OpenTelemetry Collector
+Split deployment for tp_dog: the application, SDK and OpenTelemetry Collector
 run on the **app server**; Tempo, Prometheus and Grafana run on a separate
 **observability server**.
 
@@ -14,7 +14,7 @@ Only two links cross the server boundary.
   APP SERVER                              OBSERVABILITY SERVER
   ──────────                              ────────────────────
   django app (gunicorn)
-    └── TraceNest SDK
+    └── tp_dog SDK
           │ OTLP/HTTP :4318   (localhost, never crosses the network)
           ▼
   otel-collector
@@ -26,7 +26,7 @@ Only two links cross the server boundary.
 
 | Component | Runs on | Why there |
 | --- | --- | --- |
-| Django app + TraceNest SDK | App server | — |
+| Django app + tp_dog SDK | App server | — |
 | OTel Collector | App server | Keeps the SDK→collector hop local, and only one link (collector→Tempo) leaves the host |
 | Tempo | Obs server | 14d trace retention, long-lived data |
 | Prometheus | Obs server | Long-lived TSDB, queried by Grafana |

@@ -23,6 +23,6 @@ storage:
   trace:
     backend: local
     local:
-      path: /var/tempo/traces
+      path: /var/lib/tempo/traces
     wal:
-      path: /var/tempo/wal
+      path: /var/lib/tempo/wal
