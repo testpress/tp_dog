@@ -34,17 +34,37 @@ def _get_config() -> Optional[SDKConfig]:
     return getattr(tracenest, "_ACTIVE_CONFIG", None)
 
 
-def _apply_custom_tags(span, request=None, on_request_span=None):
-    """Apply static tags and the user callback. Self-contained: never raises.
-
-    Runs before the application call, so the config lookup is guarded here
-    rather than at each call site.
-    """
+def _apply_static_tags(span: Any) -> None:
+    """Apply static tags configured on SDKConfig."""
     cfg = attempt(_get_config, default=None, _label="request_config")
     if cfg and cfg.tags:
         safe_enrich(span, cfg.tags)
 
-    callback = on_request_span or getattr(cfg, "on_request_span", None)
+
+def _apply_request_callback(span: Any, request: Any = None, response: Any = None) -> None:
+    """Invoke the on_request_span callback. Self-contained: never raises."""
+    cfg = attempt(_get_config, default=None, _label="request_config")
+    callback = getattr(cfg, "on_request_span", None)
+    if callback and request is not None:
+        def _invoke() -> None:
+            if response is not None:
+                import inspect
+                try:
+                    sig = inspect.signature(callback)
+                    if len(sig.parameters) >= 3:
+                        callback(span, request, response)
+                        return
+                except (ValueError, TypeError):
+                    pass
+            callback(span, request)
+
+        attempt(_invoke, _label="on_request_span")
+
+
+def _apply_custom_tags(span: Any, request: Any = None, on_request_span: Any = None) -> None:
+    """Apply static tags and the user callback. Self-contained: never raises."""
+    _apply_static_tags(span)
+    callback = on_request_span or getattr(attempt(_get_config, default=None, _label="request_config"), "on_request_span", None)
     if callback and request is not None:
         attempt(callback, span, request, _label="on_request_span")
 
@@ -194,7 +214,7 @@ def _prime_request(span: Any, request: Any) -> Any:
         if span_ctx is not None:
             request.trace_id = _format_trace_id(span_ctx.trace_id)
             request.span_id = _format_span_id(span_ctx.span_id)
-        _apply_custom_tags(span, request)
+        _apply_static_tags(span)
 
     attempt(_bind, _label="prime_request")
     return span_ctx
@@ -457,6 +477,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
                     safe_set_attribute(span, "error.type", exc.__class__.__name__)
                     safe_record_exception(span, exc)
                     safe_set_status(span, StatusCode.ERROR, description=str(exc))
+                    _apply_request_callback(span, request)
                     raise
                 else:
                     status_code = attempt(
@@ -512,6 +533,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
                             safe_set_attribute(span, "user.is_authenticated", True)
 
                     attempt(_set_user, _label="user_attrs")
+                    _apply_request_callback(span, request, response)
 
                     if status_code >= 500:
                         error = True

@@ -438,6 +438,71 @@ def test_on_request_span_callback_exception_silenced():
     assert req_span.attributes["http.response.status_code"] == 200
 
 
+def test_on_request_span_captures_middleware_attributes():
+    """Verify on_request_span callback sees attributes attached dynamically by middleware."""
+    from types import SimpleNamespace
+    from django.core.handlers.wsgi import WSGIHandler
+
+    def _tag_institute_subdomain(span, request):
+        institute = getattr(request, "institute", None)
+        if institute and hasattr(institute, "subdomain"):
+            span.set_attribute("institute.subdomain", institute.subdomain)
+
+    exporter = InMemorySpanExporter()
+    tracenest.init(
+        project_name="django-test-svc",
+        exporter=exporter,
+        export_batch=False,
+        on_request_span=_tag_institute_subdomain,
+    )
+
+    handler = WSGIHandler()
+    handler.load_middleware()
+
+    orig_chain = handler._middleware_chain
+    def middleware_with_institute(request):
+        request.institute = SimpleNamespace(subdomain="testpress")
+        return orig_chain(request)
+    handler._middleware_chain = middleware_with_institute
+
+    factory = RequestFactory()
+    request = factory.get("/test/sample/")
+    response = handler.get_response(request)
+    assert response.status_code == 200
+
+    spans = exporter.get_finished_spans()
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
+    assert req_span.attributes.get("institute.subdomain") == "testpress"
+
+
+def test_on_request_span_with_response_argument():
+    """Verify on_request_span callback supports optional 3-argument signature."""
+    from django.core.handlers.wsgi import WSGIHandler
+
+    exporter = InMemorySpanExporter()
+    def my_callback(span, request, response):
+        span.set_attribute("response.content_type", response.get("Content-Type", ""))
+
+    tracenest.init(
+        project_name="django-test-svc",
+        exporter=exporter,
+        export_batch=False,
+        on_request_span=my_callback,
+    )
+
+    handler = WSGIHandler()
+    handler.load_middleware()
+
+    factory = RequestFactory()
+    request = factory.get("/test/sample/")
+    response = handler.get_response(request)
+    assert response.status_code == 200
+
+    spans = exporter.get_finished_spans()
+    req_span = next(s for s in spans if s.kind == SpanKind.SERVER)
+    assert "response.content_type" in req_span.attributes
+
+
 def test_tags_from_env_var(monkeypatch):
     """Verify tags can be set via TRACENEST_TAGS env var."""
     monkeypatch.setenv("TRACENEST_TAGS", "org=testpress,institute=karunya")
