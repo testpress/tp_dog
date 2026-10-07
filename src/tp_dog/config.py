@@ -134,6 +134,20 @@ def _detect_django_env() -> Optional[str]:
         return None
 
 
+def _detect_django_cluster_name() -> Optional[str]:
+    """Try to auto-detect cluster name from Django settings."""
+    try:
+        from django.conf import settings
+        return (
+            getattr(settings, "TP_DOG_CLUSTER_NAME", None)
+            or getattr(settings, "TP_DOG_CLUSTER", None)
+            or getattr(settings, "OTEL_CLUSTER_NAME", None)
+            or getattr(settings, "CLUSTER_NAME", None)
+        )
+    except Exception:
+        return None
+
+
 def _parse_headers(headers_str: Optional[str]) -> Dict[str, str]:
     if not headers_str:
         return {}
@@ -245,6 +259,7 @@ class SDKConfig:
             or os.getenv("TP_DOG_CLUSTER_NAME")
             or os.getenv("TP_DOG_CLUSTER")
             or os.getenv("OTEL_CLUSTER_NAME")
+            or _detect_django_cluster_name()
             or "unknown-cluster"
         )
 
