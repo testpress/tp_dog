@@ -194,6 +194,9 @@ class SDKConfig:
     db_role_map: Dict[str, str] = field(default_factory=dict)
     auto_patch: bool = True
     extract_trace_context: Any = True
+    metrics_endpoint: Optional[str] = None
+    metrics_enabled: bool = True
+    metrics_export_interval_millis: int = 5000
 
     @classmethod
     def from_env_and_kwargs(
@@ -216,6 +219,9 @@ class SDKConfig:
         extract_trace_context: Optional[Any] = None,
         ignore_endpoints: Optional[List[str]] = None,
         endpoint_sample_rules: Optional[Dict[str, float]] = None,
+        metrics_endpoint: Optional[str] = None,
+        metrics_enabled: Optional[bool] = None,
+        metrics_export_interval_millis: Optional[int] = None,
         **extra: Any,
     ) -> "SDKConfig":
         """Build SDKConfig by prioritizing explicit kwargs over environment variables."""
@@ -299,6 +305,36 @@ class SDKConfig:
             or os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
             or None
         )
+
+        resolved_metrics_endpoint = (
+            metrics_endpoint
+            or extra.get("metrics_endpoint")
+            or os.getenv("TP_DOG_METRICS_ENDPOINT")
+            or os.getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
+            or None
+        )
+
+        if metrics_enabled is not None:
+            resolved_metrics_enabled = bool(metrics_enabled)
+        elif "metrics_enabled" in extra:
+            resolved_metrics_enabled = bool(extra["metrics_enabled"])
+        else:
+            resolved_metrics_enabled = _str_to_bool(
+                os.getenv("TP_DOG_METRICS_ENABLED"),
+                default=True,
+            )
+
+        try:
+            raw_interval = (
+                metrics_export_interval_millis
+                if metrics_export_interval_millis is not None
+                else extra.get("metrics_export_interval_millis")
+                or os.getenv("TP_DOG_METRICS_EXPORT_INTERVAL_MILLIS")
+                or os.getenv("OTEL_METRIC_EXPORT_INTERVAL")
+            )
+            resolved_metrics_interval = int(raw_interval) if raw_interval is not None else 5000
+        except Exception:
+            resolved_metrics_interval = 5000
 
         env_headers = _parse_headers(
             os.getenv("TP_DOG_HEADERS") or os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
@@ -545,4 +581,7 @@ class SDKConfig:
             db_role_map=resolved_db_role_map,
             auto_patch=resolved_auto_patch,
             extract_trace_context=resolved_extract,
+            metrics_endpoint=resolved_metrics_endpoint,
+            metrics_enabled=resolved_metrics_enabled,
+            metrics_export_interval_millis=resolved_metrics_interval,
         )

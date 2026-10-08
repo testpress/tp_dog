@@ -64,6 +64,7 @@ def init(
     extract_trace_context: Optional[Any] = None,
     ignore_endpoints: Optional[List[str]] = None,
     endpoint_sample_rules: Optional[Dict[str, float]] = None,
+    metric_readers: Optional[List[Any]] = None,
     **kwargs: Any,
 ) -> TracerProvider:
     """
@@ -236,6 +237,13 @@ def init(
             except Exception as exc:
                 logger.debug("Failed to auto-apply integrations during init: %s", exc)
 
+        # Initialize independent RED metrics recorder
+        try:
+            from tp_dog.metrics import init_metrics
+            init_metrics(config=config, metric_readers=metric_readers, resource=resource)
+        except Exception as exc:
+            logger.debug("tp_dog: Failed to initialize independent RED metrics: %s", exc)
+
         # Register shutdown on process exit exactly once
         global _ATEXIT_REGISTERED
         if not _ATEXIT_REGISTERED:
@@ -244,6 +252,13 @@ def init(
                 try:
                     if _ACTIVE_PROVIDER is not None:
                         _ACTIVE_PROVIDER.shutdown()
+                except Exception:
+                    pass
+                try:
+                    from tp_dog.metrics import get_metrics_recorder
+                    rec = get_metrics_recorder()
+                    if rec is not None and rec.meter_provider is not None:
+                        rec.meter_provider.shutdown()
                 except Exception:
                     pass
 
@@ -298,6 +313,16 @@ def _reset_for_testing() -> None:
                 trace._TRACER_PROVIDER_SET_ONCE._done = False  # type: ignore
             except Exception:
                 pass
+        try:
+            from tp_dog.metrics import set_metrics_recorder
+            set_metrics_recorder(None)
+        except Exception:
+            pass
+        try:
+            from tp_dog.integrations.django.request import _CALLBACK_ARITY_CACHE
+            _CALLBACK_ARITY_CACHE.clear()
+        except Exception:
+            pass
 
 
 

@@ -13,7 +13,7 @@ from opentelemetry.propagate import extract
 from tp_dog.config import SDKConfig
 from tp_dog.safety import attempt, safe_enrich, safe_record_exception, safe_set_attribute, safe_set_status
 from tp_dog.sanitize import sanitize_url
-from tp_dog.route_context import get_current_route, reset_request_route, set_request_route, reset_request_tags, set_request_tag
+from tp_dog.route_context import get_current_route, get_current_tags, reset_request_route, set_request_route, reset_request_tags, set_request_tag
 from tp_dog.tracing import reentrant_guard
 import tp_dog
 
@@ -443,6 +443,7 @@ def traced_get_response(wrapped, instance, args, kwargs):
             span_attrs["http.route"] = preresolved_route
 
         start = time.monotonic()
+        final_route = preresolved_route if (preresolved_route and preresolved_route != "__unmatched__") else path
 
         # Publish the pre-resolved route so child spans started inside the
         # handler carry http.route even though resolver_match is only
@@ -455,6 +456,10 @@ def traced_get_response(wrapped, instance, args, kwargs):
             if (preresolved_route and preresolved_route != "__unmatched__")
             else f"{method} {path}"
         )
+        final_span_name = start_span_name
+        status_code = 500
+        error = False
+        metric_recorded = False
         try:
             with tracer.start_as_current_span(
                 start_span_name,
@@ -594,6 +599,37 @@ def traced_get_response(wrapped, instance, args, kwargs):
                 finally:
                     duration_ms = (time.monotonic() - start) * 1000.0
                     safe_set_attribute(span, "http.request.duration_ms", duration_ms)
+                    try:
+                        from tp_dog.metrics import record_request
+                        record_request(
+                            method=method,
+                            route=final_route,
+                            status_code=status_code,
+                            error=error,
+                            duration_ms=duration_ms,
+                            service="django",
+                            operation=final_span_name,
+                            extra_attributes=get_current_tags(),
+                        )
+                        metric_recorded = True
+                    except Exception as metric_exc:
+                        logger.debug("Failed to record request metrics: %s", metric_exc)
         finally:
+            if not metric_recorded:
+                try:
+                    from tp_dog.metrics import record_request
+                    duration_ms = (time.monotonic() - start) * 1000.0
+                    record_request(
+                        method=method,
+                        route=final_route,
+                        status_code=status_code,
+                        error=True,
+                        duration_ms=duration_ms,
+                        service="django",
+                        operation=final_span_name,
+                        extra_attributes=get_current_tags(),
+                    )
+                except Exception as metric_exc:
+                    logger.debug("Failed to record fallback request metrics: %s", metric_exc)
             reset_request_route(route_token)
             reset_request_tags()

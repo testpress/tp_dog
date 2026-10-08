@@ -152,7 +152,11 @@ class RouteEnrichingSpanProcessor(SpanProcessor):
             attrs = getattr(span, "_attributes", None)
             if attrs is None:
                 attrs = getattr(span, "attributes", None)
-            if attrs is not None and hasattr(attrs, "__setitem__"):
+            target_dict = getattr(attrs, "_dict", None)
+            if target_dict is None and hasattr(attrs, "__setitem__"):
+                target_dict = attrs
+
+            if target_dict is not None:
                 if not attrs.get("normalized.service"):
                     svc = (
                         attrs.get("peer.service")
@@ -164,7 +168,7 @@ class RouteEnrichingSpanProcessor(SpanProcessor):
                         svc = "postgres"
                     elif svc == "aws-api":
                         svc = "aws-s3"
-                    attrs["normalized.service"] = str(svc or "django")
+                    target_dict["normalized.service"] = str(svc or "django")
 
                 if not attrs.get("normalized.operation"):
                     op = None
@@ -177,7 +181,7 @@ class RouteEnrichingSpanProcessor(SpanProcessor):
                     else:
                         op = getattr(span, "name", "")
                     if op:
-                        attrs["normalized.operation"] = str(op)
+                        target_dict["normalized.operation"] = str(op)
         except Exception:
             pass
 

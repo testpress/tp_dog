@@ -24,6 +24,9 @@ def _tp_dog_redis_request_hook(span: Any, instance: Any, args: Any, kwargs: Any)
                 span.set_attribute("db.name", "redis")
                 span.set_attribute("normalized.service", "redis")
                 span.set_attribute("normalized.operation", f"redis.{raw_op.lower()}" if raw_op else "redis.command")
+                # Mask Redis connection IP/port to avoid exposing internal network topology
+                span.set_attribute("net.peer.name", "?")
+                span.set_attribute("net.peer.port", "?")
     except Exception as exc:
         logger.debug("redis hook/guard error", exc_info=True)
 

@@ -442,6 +442,7 @@ def test_on_request_span_captures_middleware_attributes():
     """Verify on_request_span callback sees attributes attached dynamically by middleware."""
     from types import SimpleNamespace
     from django.core.handlers.wsgi import WSGIHandler
+    tp_dog._reset_for_testing()
 
     def _tag_institute_subdomain(span, request):
         institute = getattr(request, "institute", None)

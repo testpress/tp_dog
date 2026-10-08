@@ -97,3 +97,75 @@ class SafeSpanExporter(SpanExporter):
             return self._exporter.force_flush(timeout_millis)
         except Exception:
             return False
+
+
+try:
+    from opentelemetry.sdk.metrics.export import MetricExporter, MetricExportResult
+except ImportError:
+    MetricExporter = object  # type: ignore
+    MetricExportResult = None  # type: ignore
+
+
+class SafeMetricExporter(MetricExporter):
+    """Fail-safe wrapper around any OpenTelemetry MetricExporter.
+
+    If the collector is down or unreachable, absorbs errors, logs rate-limited
+    diagnostic warnings, and returns MetricExportResult.FAILURE without breaking
+    the application.
+    """
+
+    def __init__(self, exporter: Any, endpoint: Optional[str] = None):
+        pref_temp = getattr(exporter, "_preferred_temporality", None)
+        pref_agg = getattr(exporter, "_preferred_aggregation", None)
+        try:
+            super().__init__(preferred_temporality=pref_temp, preferred_aggregation=pref_agg)
+        except Exception:
+            pass
+        self._exporter = exporter
+        self._endpoint = endpoint or getattr(exporter, "_endpoint", "collector")
+        self._last_log_time = -float("inf")
+        self._error_count = 0
+
+    @property
+    def _preferred_temporality(self) -> Any:
+        return getattr(self._exporter, "_preferred_temporality", {})
+
+    @property
+    def _preferred_aggregation(self) -> Any:
+        return getattr(self._exporter, "_preferred_aggregation", {})
+
+    def export(self, metrics_data: Any, timeout_millis: float = 10000, **kwargs: Any) -> Any:
+        try:
+            res = self._exporter.export(metrics_data, timeout_millis=timeout_millis, **kwargs)
+            if MetricExportResult is not None and res == MetricExportResult.SUCCESS and self._error_count > 0:
+                logger.info("tp_dog: Connection to collector metrics at %s restored.", self._endpoint)
+                self._error_count = 0
+            return res
+        except Exception as exc:
+            self._error_count += 1
+            now = time.monotonic()
+            if now - self._last_log_time > 300:
+                self._last_log_time = now
+                logger.warning(
+                    "tp_dog: Unable to export metrics to collector at %s (%s). "
+                    "Host application is completely unaffected. (Failures: %d)",
+                    self._endpoint,
+                    exc,
+                    self._error_count,
+                )
+            if MetricExportResult is not None:
+                return MetricExportResult.FAILURE
+            return None
+
+    def shutdown(self, timeout_millis: float = 30000, **kwargs: Any) -> None:
+        try:
+            self._exporter.shutdown(timeout_millis=timeout_millis, **kwargs)
+        except Exception:
+            pass
+
+    def force_flush(self, timeout_millis: float = 30000) -> bool:
+        try:
+            return bool(self._exporter.force_flush(timeout_millis=timeout_millis))
+        except Exception:
+            return False
+
