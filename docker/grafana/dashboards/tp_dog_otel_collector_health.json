@@ -134,7 +134,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "count(up{source=\"otelcol-telemetry\", net_host_name=~\"$instance\"} == 1) or vector(0)",
+          "expr": "count(up{source=\"otelcol-telemetry\", net_host_name=~\"(${instance:regex})\"} == 1) or vector(0)",
           "instant": true,
           "legendFormat": "Healthy",
           "range": false,
@@ -204,7 +204,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "count(sum by (instance) (rate({__name__=~\"otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*|otelcol_processor_dropped_spans.*\", net_host_name=~\"$instance\"}[$__rate_interval])) > 0) or vector(0)",
+          "expr": "count(sum by (instance) (rate({__name__=~\"otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*|otelcol_processor_dropped_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) > 0) or vector(0)",
           "instant": true,
           "legendFormat": "Dropping",
           "range": false,
@@ -273,7 +273,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "avg((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"$instance\"}[$__rate_interval]) / 0.5) * 100) or vector(0)",
+          "expr": "avg((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:regex})\"}[2m]) / 0.5) * 100) or vector(0)",
           "instant": false,
           "legendFormat": "Avg CPU",
           "range": true,
@@ -342,7 +342,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "avg((otelcol_process_memory_rss{net_host_name=~\"$instance\"} / 402653184) * 100) or vector(0)",
+          "expr": "avg((otelcol_process_memory_rss{net_host_name=~\"(${instance:regex})\"} / 402653184) * 100) or vector(0)",
           "instant": false,
           "legendFormat": "Avg Memory",
           "range": true,
@@ -602,7 +602,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) (up{source=\"otelcol-telemetry\", net_host_name=~\"$instance\"})",
+          "expr": "max by (net_host_name, collector_alias) (up{source=\"otelcol-telemetry\", net_host_name=~\"(${instance:regex})\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -615,7 +615,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) ((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"$instance\"}[$__rate_interval]) / 0.5) * 100)",
+          "expr": "max by (net_host_name, collector_alias) ((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:regex})\"}[2m]) / 0.5) * 100)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -628,7 +628,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"$instance\"})",
+          "expr": "max by (net_host_name, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"(${instance:regex})\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -641,7 +641,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"$instance\"}[$__rate_interval])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"}))",
+          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -654,7 +654,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"$instance\"}[$__rate_interval])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"}))",
+          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -667,7 +667,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"$instance\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"$instance\"}) * 100) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"}))",
+          "expr": "max by (net_host_name, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"}) * 100) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -680,7 +680,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"})",
+          "expr": "max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -852,7 +852,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"$instance\"})",
+          "expr": "sum by (instance, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"(${instance:regex})\"})",
           "legendFormat": "{{collector_alias}} {{instance}}",
           "range": true,
           "refId": "A"
@@ -958,8 +958,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum by (instance, collector_alias) (rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"$instance\"}[$__rate_interval])) / 0.5) * 100",
-          "legendFormat": "{{collector_alias}} {{instance}}",
+          "expr": "(sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:regex})\"}[2m])) / 0.5) * 100",
+          "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
           "refId": "A"
         }
@@ -1051,8 +1051,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, collector_alias) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"$instance\"}[$__rate_interval])) or (0 * sum by (instance, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"}))",
-          "legendFormat": "{{collector_alias}} {{instance}}",
+          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
           "refId": "A"
         }
@@ -1144,8 +1144,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, collector_alias) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"$instance\"}[$__rate_interval])) or (0 * sum by (instance, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"}))",
-          "legendFormat": "{{collector_alias}} {{instance}}",
+          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
           "refId": "A"
         }
@@ -1240,8 +1240,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, collector_alias) (rate({__name__=~\"otelcol_processor_dropped_spans.*|otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*\", net_host_name=~\"$instance\"}[$__rate_interval])) or (0 * sum by (instance, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"}))",
-          "legendFormat": "{{collector_alias}} {{instance}}",
+          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_processor_dropped_spans.*|otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
           "refId": "A"
         }
@@ -1343,7 +1343,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"$instance\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"$instance\"}) * 100) or (0 * sum by (instance, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"$instance\"}))",
+          "expr": "sum by (instance, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"}) * 100) or (0 * sum by (instance, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
           "legendFormat": "{{collector_alias}} {{instance}}",
           "range": true,
           "refId": "A"
@@ -7601,7 +7601,7 @@
         "type": "custom"
       },
       {
-        "allValue": null,
+        "allValue": ".*",
         "current": {
           "selected": true,
           "text": [
@@ -7633,8 +7633,8 @@
         "allowCustomValue": true,
         "current": {
           "selected": true,
-          "text": "otel-collector-spanmetrics",
-          "value": "otel-collector-spanmetrics"
+          "text": "otel-collector",
+          "value": "otel-collector"
         },
         "datasource": {
           "type": "prometheus",
@@ -8035,5 +8035,5 @@
   "timezone": "browser",
   "title": "OTel Collector Fleet & Metrics",
   "uid": "tp-dog-otel-collector-health",
-  "version": 5
+  "version": 6
 }

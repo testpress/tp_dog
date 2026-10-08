@@ -48,7 +48,41 @@
         "type": "datasource"
       },
       {
-        "allValue": null,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(apm_calls_total, institute_subdomain)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Institute",
+        "multi": true,
+        "name": "institute",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          }
+        ],
+        "query": "label_values(apm_calls_total, institute_subdomain)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
         "current": {
           "selected": true,
           "text": [
@@ -84,6 +118,40 @@
         "allValue": null,
         "current": {
           "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(apm_calls_total, cluster_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Cluster",
+        "multi": true,
+        "name": "cluster",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          }
+        ],
+        "query": "label_values(apm_calls_total, cluster_name)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
           "text": "django",
           "value": "django"
         },
@@ -91,7 +159,7 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(apm_calls_total{project_name=~\"$project\"}, normalized_service)",
+        "definition": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}, normalized_service)",
         "hide": 0,
         "includeAll": false,
         "label": "Service",
@@ -104,13 +172,13 @@
             "value": "django"
           }
         ],
-        "query": "label_values(apm_calls_total{project_name=~\"$project\"}, normalized_service)",
+        "query": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}, normalized_service)",
         "refresh": 2,
         "sort": 1,
         "type": "query"
       },
       {
-        "allValue": null,
+        "allValue": ".*",
         "current": {
           "selected": true,
           "text": [
@@ -124,7 +192,7 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(apm_calls_total{project_name=~\"$project\", normalized_service=~\"(?i)${service:regex}\"}, db_instance)",
+        "definition": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\"}, db_instance)",
         "hide": 0,
         "includeAll": true,
         "label": "DB Instance",
@@ -137,13 +205,13 @@
             "value": "$__all"
           }
         ],
-        "query": "label_values(apm_calls_total{project_name=~\"$project\", normalized_service=~\"(?i)${service:regex}\"}, db_instance)",
+        "query": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\"}, db_instance)",
         "refresh": 2,
         "sort": 1,
         "type": "query"
       },
       {
-        "allValue": null,
+        "allValue": ".*",
         "current": {
           "selected": true,
           "text": [
@@ -157,7 +225,7 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(apm_calls_total{project_name=~\"$project\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}, normalized_operation)",
+        "definition": "label_values({project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}, normalized_operation)",
         "hide": 0,
         "includeAll": true,
         "label": "Operation",
@@ -170,7 +238,7 @@
             "value": "$__all"
           }
         ],
-        "query": "label_values(apm_calls_total{project_name=~\"$project\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}, normalized_operation)",
+        "query": "label_values({project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}, normalized_operation)",
         "refresh": 2,
         "sort": 1,
         "type": "query"
@@ -211,7 +279,7 @@
   "timezone": "browser",
   "title": "Generic Service Overview",
   "uid": "generic-service-overview",
-  "version": 1005,
+  "version": 1010,
   "panels": [
     {
       "datasource": {
@@ -300,7 +368,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__rate_interval]))",
+          "expr": "sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))\nor\nsum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))",
           "legendFormat": "Throughput (RPS)",
           "range": true,
           "refId": "A"
@@ -357,7 +425,7 @@
           "links": [
             {
               "title": "\ud83d\udd0d Inspect Error Traces for ${service}",
-              "url": "/d/generic-service-errors/generic-service-errors?var-service=${service}&var-project=${project}&var-cluster=${cluster}&${__url_time_range}"
+              "url": "/d/generic-service-errors?var-service=${service:raw}&var-project=${project:raw}&${__url_time_range}"
             }
           ],
           "mappings": [],
@@ -413,7 +481,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\", error=\"true\"}[$__rate_interval])) or vector(0)) / (sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__rate_interval])) > 0 or vector(1))) * 100",
+          "expr": "(\n  (\n    sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__rate_interval]))\n    or sum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__rate_interval]))\n    or vector(0)\n  )\n  /\n  (\n    sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))\n    or sum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))\n    or vector(1)\n  )\n) * 100",
           "legendFormat": "Error Rate %",
           "range": true,
           "refId": "A"
@@ -427,7 +495,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Latency percentiles (P50, P95, P99) with exemplars enabled for direct Tempo trace navigation",
+      "description": "Latency percentiles (P50, P95, P99)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -556,8 +624,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum(rate(apm_duration_milliseconds_bucket{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__rate_interval])) by (le))",
+          "exemplar": false,
+          "expr": "histogram_quantile(0.50, sum(rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval])) by (le))\nor\nhistogram_quantile(0.50, sum(rate(apm_duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval])) by (le))",
           "legendFormat": "P50 Latency",
           "range": true,
           "refId": "A"
@@ -568,8 +636,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__rate_interval])) by (le))",
+          "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum(rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval])) by (le))\nor\nhistogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval])) by (le))",
           "legendFormat": "P95 Latency",
           "range": true,
           "refId": "B"
@@ -580,14 +648,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "exemplar": true,
-          "expr": "histogram_quantile(0.99, sum(rate(apm_duration_milliseconds_bucket{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__rate_interval])) by (le))",
+          "exemplar": false,
+          "expr": "histogram_quantile(0.99, sum(rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval])) by (le))\nor\nhistogram_quantile(0.99, sum(rate(apm_duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval])) by (le))",
           "legendFormat": "P99 Latency",
           "range": true,
           "refId": "C"
         }
       ],
-      "title": "Latency Percentiles (P50 / P95 / P99) with Exemplars",
+      "title": "Latency Percentiles (P50 / P95 / P99)",
       "type": "timeseries"
     },
     {
@@ -870,7 +938,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (normalized_operation) (rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__range]))",
+          "expr": "sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range]))\nor\nsum by (normalized_operation) (rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range]))",
           "format": "table",
           "instant": true,
           "legendFormat": "RPS",
@@ -883,7 +951,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(((sum by (normalized_operation) (rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\", error=\"true\"}[$__range]))) or (0 * sum by (normalized_operation) (rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__range])))) / (sum by (normalized_operation) (rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__range])) > 0)) * 100",
+          "expr": "(\n  (\n    (sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__range])))\n    or (0 * sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n    or (sum by (normalized_operation) (rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__range])))\n    or (0 * sum by (normalized_operation) (rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n  )\n  /\n  (\n    (sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n    or (sum by (normalized_operation) (rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n  )\n) * 100",
           "format": "table",
           "instant": true,
           "legendFormat": "Error Rate",
@@ -896,7 +964,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__range])))",
+          "expr": "histogram_quantile(0.50, sum by (le, normalized_operation) (rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\nor\nhistogram_quantile(0.50, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))",
           "format": "table",
           "instant": true,
           "legendFormat": "P50",
@@ -909,7 +977,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__range])))",
+          "expr": "histogram_quantile(0.95, sum by (le, normalized_operation) (rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\nor\nhistogram_quantile(0.95, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))",
           "format": "table",
           "instant": true,
           "legendFormat": "P95",
@@ -922,7 +990,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:pipe})\"}[$__range])))",
+          "expr": "histogram_quantile(0.99, sum by (le, normalized_operation) (rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\nor\nhistogram_quantile(0.99, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))",
           "format": "table",
           "instant": true,
           "legendFormat": "P99",
@@ -933,37 +1001,44 @@
       "title": "Operations Summary",
       "transformations": [
         {
-          "id": "merge",
-          "options": {}
+          "id": "joinByField",
+          "options": {
+            "byField": "normalized_operation",
+            "mode": "outer"
+          }
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true
             },
             "indexByName": {
-              "Value #A": 2,
-              "RPS": 2,
-              "Value #C": 3,
-              "Error Rate %": 3,
-              "Value #D": 4,
-              "P50 Latency": 4,
-              "Value #E": 5,
-              "P95 Latency": 5,
-              "Value #F": 6,
-              "P99 Latency": 6,
-              "normalized_operation": 1,
-              "Operation": 1
+              "normalized_operation": 0,
+              "Operation": 0,
+              "Value #A": 1,
+              "RPS": 1,
+              "Value #C": 2,
+              "Error Rate %": 2,
+              "Value #D": 3,
+              "P50 Latency": 3,
+              "Value #E": 4,
+              "P95 Latency": 4,
+              "Value #F": 5,
+              "P99 Latency": 5
             },
             "renameByName": {
-              "http_route": "Endpoint",
+              "normalized_operation": "Operation",
               "Value #A": "RPS",
               "Value #C": "Error Rate %",
               "Value #D": "P50 Latency",
               "Value #E": "P95 Latency",
-              "Value #F": "P99 Latency",
-              "normalized_operation": "Operation"
+              "Value #F": "P99 Latency"
             }
           }
         }

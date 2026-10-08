@@ -5,10 +5,10 @@ datasources:
     uid: prometheus
     type: prometheus
     access: proxy
-    url: http://192.168.139.158:9090
+    url: http://65.21.236.56:9090
     isDefault: true
     jsonData:
-      timeInterval: 5s
+      timeInterval: 15s
       exemplarTraceIdDestinations:
         - name: trace_id
           datasourceUid: tempo
@@ -17,7 +17,7 @@ datasources:
     uid: tempo
     type: tempo
     access: proxy
-    url: http://192.168.139.158:3200
+    url: http://65.21.236.56:3200
 
     jsonData:
       httpMethod: GET

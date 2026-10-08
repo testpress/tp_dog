@@ -41,7 +41,7 @@
       "title": "Project Catalog",
       "tooltip": "Go to Service Catalog",
       "type": "link",
-      "url": "/d/service-catalog"
+      "url": "/d/tp-dog-project-catalog"
     }
   ],
   "liveNow": false,
@@ -55,7 +55,7 @@
       },
       "id": 100,
       "options": {
-        "content": "<div style=\"display: flex; gap: 12px; align-items: center; padding: 6px 0;\">\n  <a href=\"/d/generic-service-overview?var-service=${service}&var-project=${project}&${__url_time_range}\" style=\"background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">\u2190 Service Overview</a>\n  <a href=\"/d/service-catalog?${__all_variables}&${__url_time_range}\" style=\"background: rgba(255, 255, 255, 0.06); color: #e2e8f0; border: 1px solid rgba(255, 255, 255, 0.15); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">\u2190 Project Catalog</a>\n  <span style=\"color: #ef4444; font-weight: 600; font-size: 14px; margin-left: 12px;\">Error & Exception Triage for <span style=\"color: #ffffff;\">${service}</span></span>\n</div>",
+        "content": "<div style=\"display: flex; gap: 12px; align-items: center; padding: 6px 0;\">\n  <a href=\"/d/generic-service-overview?var-service=${service}&var-project=${project}&${__url_time_range}\" style=\"background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">\u2190 Service Overview</a>\n  <a href=\"/d/tp-dog-project-catalog?${__all_variables}&${__url_time_range}\" style=\"background: rgba(255, 255, 255, 0.06); color: #e2e8f0; border: 1px solid rgba(255, 255, 255, 0.15); padding: 5px 12px; border-radius: 4px; font-weight: 500; font-size: 13px; text-decoration: none;\">\u2190 Project Catalog</a>\n  <span style=\"color: #ef4444; font-weight: 600; font-size: 14px; margin-left: 12px;\">Error & Exception Triage for <span style=\"color: #ffffff;\">${service}</span></span>\n</div>",
         "defaultContent": "",
         "editorMode": "code",
         "mode": "html"
@@ -125,7 +125,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__range])) or vector(0)",
+          "expr": "sum(increase(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "Failed Calls",
           "range": false,
@@ -198,7 +198,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}[$__range])) > 0 or vector(1))) * 100",
+          "expr": "((sum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}[$__range])) > 0 or vector(1))) * 100",
           "instant": true,
           "legendFormat": "Error Rate %",
           "range": false,
@@ -268,7 +268,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "count(sum by (normalized_operation) (rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__range])) > 0) or vector(0)",
+          "expr": "count(sum by (normalized_operation) (rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__range])) > 0) or vector(0)",
           "instant": true,
           "legendFormat": "Failing Endpoints",
           "range": false,
@@ -375,7 +375,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__rate_interval])) or vector(0)) / (sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}[$__rate_interval])) > 0 or vector(1))) * 100",
+          "expr": "((sum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__rate_interval])) or vector(0)) / (sum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}[$__rate_interval])) > 0 or vector(1))) * 100",
           "legendFormat": "Error Rate %",
           "range": true,
           "refId": "A"
@@ -476,7 +476,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(apm_calls_total{project_name=~\"${project:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__rate_interval])) by (http_status_code)",
+          "expr": "sum(rate(apm_calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", error=\"true\"}[$__rate_interval])) by (http_status_code)",
           "legendFormat": "HTTP {{http_status_code}}",
           "range": true,
           "refId": "A"
@@ -551,6 +551,22 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "traceService"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "displayName",
+                "value": "SERVICE"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "serviceName"
             },
             "properties": [
@@ -567,12 +583,44 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "traceName"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "RESOURCE"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "name"
             },
             "properties": [
               {
                 "id": "displayName",
                 "value": "RESOURCE"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "traceDuration"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "displayName",
+                "value": "DURATION"
+              },
+              {
+                "id": "unit",
+                "value": "ms"
               }
             ]
           },
@@ -683,7 +731,7 @@
             "uid": "tempo"
           },
           "limit": 50,
-          "query": "{ span.normalized.service =~ `(?i)${service:regex}` && (status = error || status_code = STATUS_CODE_ERROR || error = true) }",
+          "query": "{ span.normalized.service =~ `(?i)${service:regex}` && (status = error || span.error = true) }",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -697,9 +745,12 @@
             "excludeByName": {},
             "indexByName": {
               "traceID": 0,
-              "name": 1,
-              "startTime": 2,
-              "serviceName": 3,
+              "startTime": 1,
+              "traceService": 2,
+              "serviceName": 2,
+              "traceName": 3,
+              "name": 3,
+              "traceDuration": 4,
               "duration": 4
             },
             "renameByName": {}
@@ -719,7 +770,41 @@
   "templating": {
     "list": [
       {
-        "allValue": null,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(apm_calls_total, institute_subdomain)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Institute",
+        "multi": true,
+        "name": "institute",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          }
+        ],
+        "query": "label_values(apm_calls_total, institute_subdomain)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
         "current": {
           "selected": true,
           "text": "All",
@@ -745,6 +830,40 @@
         "allValue": null,
         "current": {
           "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(apm_calls_total, cluster_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Cluster",
+        "multi": true,
+        "name": "cluster",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          }
+        ],
+        "query": "label_values(apm_calls_total, cluster_name)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
           "text": "django",
           "value": "django"
         },
@@ -752,14 +871,14 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(apm_calls_total{project_name=~\"$project\"}, normalized_service)",
+        "definition": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}, normalized_service)",
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "label": "Service",
         "multi": false,
         "name": "service",
         "options": [],
-        "query": "label_values(apm_calls_total{project_name=~\"$project\"}, normalized_service)",
+        "query": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}, normalized_service)",
         "refresh": 2,
         "sort": 1,
         "type": "query"
@@ -798,6 +917,6 @@
   "timezone": "browser",
   "title": "Generic Service Errors",
   "uid": "generic-service-errors",
-  "version": 4,
+  "version": 6,
   "weekStart": ""
 }
