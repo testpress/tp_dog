@@ -33,7 +33,7 @@
         "current": {
           "selected": true,
           "text": "Prometheus",
-          "value": "prometheus"
+          "value": "_IY366MMk"
         },
         "hide": 2,
         "includeAll": false,
@@ -60,7 +60,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total, institute_subdomain)",
         "hide": 0,
@@ -94,7 +94,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total, project_name)",
         "hide": 0,
@@ -127,7 +127,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total, cluster_name)",
         "hide": 0,
@@ -157,7 +157,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}, normalized_service)",
         "hide": 0,
@@ -190,7 +190,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\"}, db_instance)",
         "hide": 0,
@@ -223,7 +223,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values({project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}, normalized_operation)",
         "hide": 0,
@@ -246,7 +246,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "filters": [],
         "hide": 0,
@@ -284,7 +284,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "_IY366MMk"
       },
       "description": "Total request volume per second over time",
       "fieldConfig": {
@@ -365,7 +365,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))\nor\nsum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))",
@@ -380,7 +380,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "_IY366MMk"
       },
       "description": "Percentage of requests returning HTTP 5xx errors",
       "fieldConfig": {
@@ -478,7 +478,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "(\n  (\n    sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__rate_interval]))\n    or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__rate_interval]))\n    or vector(0)\n  )\n  /\n  (\n    sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))\n    or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__rate_interval]))\n    or vector(1)\n  )\n) * 100",
@@ -493,7 +493,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "_IY366MMk"
       },
       "description": "Latency percentiles (P50, P95, P99)",
       "fieldConfig": {
@@ -621,7 +621,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -633,7 +633,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -645,7 +645,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -673,7 +673,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "_IY366MMk"
       },
       "description": "Primary navigation: Complete breakdown of Django routes with Method, RPS, error rates, latency percentiles, and 1-click drilldown into Endpoint Details.",
       "fieldConfig": {
@@ -935,7 +935,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range]))\nor\nsum by (normalized_operation) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range]))",
@@ -948,7 +948,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "(\n  (\n    (sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__range])))\n    or (0 * sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n    or (sum by (normalized_operation) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\", error=\"true\"}[$__range])))\n    or (0 * sum by (normalized_operation) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n  )\n  /\n  (\n    (sum by (normalized_operation) (rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n    or (sum by (normalized_operation) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\n  )\n) * 100",
@@ -961,7 +961,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by (le, normalized_operation) (rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\nor\nhistogram_quantile(0.50, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))",
@@ -974,7 +974,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by (le, normalized_operation) (rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\nor\nhistogram_quantile(0.95, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))",
@@ -987,7 +987,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum by (le, normalized_operation) (rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))\nor\nhistogram_quantile(0.99, sum by (le, normalized_operation) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", db_instance=~\"${db_instance:regex}|^$\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=~\"(?i)(${operation:regex})\"}[$__range])))",

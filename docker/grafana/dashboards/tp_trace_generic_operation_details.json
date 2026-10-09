@@ -44,7 +44,7 @@
         "current": {
           "selected": true,
           "text": "Prometheus",
-          "value": "prometheus"
+          "value": "_IY366MMk"
         },
         "hide": 2,
         "includeAll": false,
@@ -89,7 +89,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total, institute_subdomain)",
         "hide": 0,
@@ -123,7 +123,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total, project_name)",
         "hide": 0,
@@ -156,7 +156,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total, cluster_name)",
         "hide": 0,
@@ -186,7 +186,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values(apm_calls_total{project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}, normalized_service)",
         "hide": 0,
@@ -215,7 +215,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "definition": "label_values({project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\"}, normalized_operation)",
         "hide": 0,
@@ -238,7 +238,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus"
+          "uid": "_IY366MMk"
         },
         "filters": [],
         "hide": 0,
@@ -288,7 +288,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "_IY366MMk"
       },
       "description": "Total requests and error breakdown over time for $service $operation",
       "fieldConfig": {
@@ -400,7 +400,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=${operation:doublequote}}[$__rate_interval]))\nor\nsum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=${operation:doublequote}}[$__rate_interval]))",
@@ -411,7 +411,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=${operation:doublequote}, error=\"true\"}[$__rate_interval]))\nor\nsum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=${operation:doublequote}, error=\"true\"}[$__rate_interval]))",
@@ -426,7 +426,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "_IY366MMk"
       },
       "description": "Error volume and distribution broken down by HTTP status code",
       "fieldConfig": {
@@ -598,7 +598,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "expr": "sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", normalized_operation=${operation:doublequote}, error=\"true\"}[$__rate_interval])) by (http_status_code)\nor\nsum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", normalized_service=~\"(?i)${service:regex}\", span_kind!=\"SPAN_KIND_INTERNAL\", normalized_operation=${operation:doublequote}, error=\"true\"}[$__rate_interval])) by (http_status_code)",
@@ -613,7 +613,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "_IY366MMk"
       },
       "description": "Multi-percentile latency distribution (p50, p75, p90, p95, p99, p99.9, Max) with Exemplar trace dots linking to Tempo waterfalls",
       "fieldConfig": {
@@ -756,7 +756,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -768,7 +768,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -780,7 +780,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -792,7 +792,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "_IY366MMk"
           },
           "editorMode": "code",
           "exemplar": true,
