@@ -45,7 +45,7 @@
       "targetBlank": false,
       "title": "PostgreSQL",
       "type": "link",
-      "url": "/d/generic-service-overview?var-service=postgresql"
+      "url": "/d/generic-service-overview?var-service=postgres"
     },
     {
       "asDropdown": false,
@@ -117,7 +117,7 @@
         "type": "datasource"
       },
       {
-        "allValue": ".*",
+        "allValue": null,
         "current": {
           "selected": true,
           "text": [
@@ -252,7 +252,7 @@
     "auto_interval": "5s"
   },
   "timezone": "browser",
-  "title": "tp_trace APM \u2014 Service Catalog",
+  "title": "APM Overview",
   "uid": "tp-trace-project-catalog",
   "version": 1007,
   "panels": [
@@ -292,7 +292,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -304,7 +305,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "A_base"
+          "refId": "A_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -316,7 +318,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "B"
+          "refId": "B",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -328,7 +331,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "B_base"
+          "refId": "B_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -340,7 +344,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "C"
+          "refId": "C",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -352,7 +357,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "C_base"
+          "refId": "C_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -364,7 +370,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "D"
+          "refId": "D",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -376,7 +383,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "E"
+          "refId": "E",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -388,7 +396,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "F"
+          "refId": "F",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -400,7 +409,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "G"
+          "refId": "G",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -412,7 +422,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "G_base"
+          "refId": "G_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -424,7 +435,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "G_curr"
+          "refId": "G_curr",
+          "exemplar": false
         }
       ],
       "transformations": [
@@ -478,7 +490,7 @@
                 "value": [
                   {
                     "title": "Open ${__data.fields.Service} Dashboard",
-                    "url": "${__data.fields.Dashboard}${__all_variables}&${__url_time_range}"
+                    "url": "${__data.fields.Dashboard}var-operation=$__all&${project:queryparam}&${cluster:queryparam}&${institute:queryparam}&${__url_time_range}"
                   }
                 ]
               }
@@ -695,9 +707,27 @@
                   },
                   {
                     "options": {
-                      "Degraded": {
-                        "color": "#7f1d1d",
+                      "Warning": {
+                        "color": "#d97706",
                         "index": 1
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "Degraded": {
+                        "color": "#d97706",
+                        "index": 2
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "Critical": {
+                        "color": "#7f1d1d",
+                        "index": 3
                       }
                     },
                     "type": "value"
@@ -706,7 +736,7 @@
                     "options": {
                       "No data": {
                         "color": "#374151",
-                        "index": 2
+                        "index": 4
                       }
                     },
                     "type": "value"
@@ -761,12 +791,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "label_replace(label_replace(label_replace((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind=\"SPAN_KIND_SERVER\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]))), \"Service\", \"Django\", \"\", \"\"), \"Type\", \"Web Framework\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=django&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])), \"Service\", \"$1\", \"db_instance\", \"(.*)\"), \"Type\", \"Database\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=postgres&var-db_instance=$1&\", \"db_instance\", \"(.*)\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])), \"Service\", \"default\", \"\", \"\"), \"Type\", \"Database\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=postgres&var-db_instance=default&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])), \"Service\", \"PgBouncer\", \"\", \"\"), \"Type\", \"Connection Pooler\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=pgbouncer&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])), \"Service\", \"Redis\", \"\", \"\"), \"Type\", \"Cache\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=redis&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django\\\\..*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])), \"Service\", \"Requests\", \"\", \"\"), \"Type\", \"HTTP Client\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=django&\", \"\", \"\")",
+          "expr": "label_replace(label_replace(label_replace((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]))), \"Service\", \"Django\", \"\", \"\"), \"Type\", \"Web Framework\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=django&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])), \"Service\", \"$1\", \"db_instance\", \"(.*)\"), \"Type\", \"Database\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=postgres&var-db_instance=$1&\", \"db_instance\", \"(.*)\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])), \"Service\", \"default\", \"\", \"\"), \"Type\", \"Database\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=postgres&var-db_instance=default&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])), \"Service\", \"PgBouncer\", \"\", \"\"), \"Type\", \"Connection Pooler\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=pgbouncer&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])), \"Service\", \"Redis\", \"\", \"\"), \"Type\", \"Cache\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=redis&\", \"\", \"\")\nor\nlabel_replace(label_replace(label_replace(sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django[.].*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])), \"Service\", \"Requests\", \"\", \"\"), \"Type\", \"HTTP Client\", \"\", \"\"), \"Dashboard\", \"/d/generic-service-overview?var-service=django&\", \"\", \"\")",
           "format": "table",
           "instant": true,
           "legendFormat": "Throughput",
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -774,12 +805,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (Service, Error_Rate) (\n  (label_replace((((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range]))) or vector(0)) / ((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]))) > 0)) * 100, \"Service\", \"Django\", \"\", \"\"))\n  or\n  (label_replace(((sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"$1\", \"db_instance\", \"(.*)\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"default\", \"\", \"\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"PgBouncer\", \"\", \"\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"Redis\", \"\", \"\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django\\\\..*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django\\\\..*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"Requests\", \"\", \"\"))\n)",
+          "expr": "sum by (Service, Error_Rate) (\n  (label_replace((((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range]))) or vector(0)) / ((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]))) > 0)) * 100, \"Service\", \"Django\", \"\", \"\"))\n  or\n  (label_replace(((sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"$1\", \"db_instance\", \"(.*)\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"default\", \"\", \"\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"PgBouncer\", \"\", \"\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"Redis\", \"\", \"\"))\n  or\n  (label_replace(((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django[.].*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or vector(0)) / (sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django[.].*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0)) * 100, \"Service\", \"Requests\", \"\", \"\"))\n)",
           "format": "table",
           "instant": true,
           "legendFormat": "Error Rate",
           "range": false,
-          "refId": "B"
+          "refId": "B",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -787,12 +819,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (Service, P95_Latency) (\n  label_replace((histogram_quantile(0.95, sum(rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)) or histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le))), \"Service\", \"Django\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum by (le, db_instance) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]))), \"Service\", \"$1\", \"db_instance\", \"(.*)\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"default\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"PgBouncer\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"Redis\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django\\\\..*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"Requests\", \"\", \"\")\n)",
+          "expr": "sum by (Service, P95_Latency) (\n  label_replace((histogram_quantile(0.95, sum(rate(duration_milliseconds_bucket{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)) or histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le))), \"Service\", \"Django\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum by (le, db_instance) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]))), \"Service\", \"$1\", \"db_instance\", \"(.*)\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"default\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"PgBouncer\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"Redis\", \"\", \"\")\n  or\n  label_replace(histogram_quantile(0.95, sum(rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django[.].*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) by (le)), \"Service\", \"Requests\", \"\", \"\")\n)",
           "format": "table",
           "instant": true,
           "legendFormat": "P95 Latency",
           "range": false,
-          "refId": "C"
+          "refId": "C",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -800,12 +833,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (Service, Status) (\n  label_replace((label_replace((((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[$__range]))) or vector(0)) / ((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]))) > 0)) * 100 > 1, \"Service\", \"Django\", \"\", \"\") * 0 + 1), \"Status\", \"Degraded\", \"\", \"\")\n  or\n  label_replace((label_replace(((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]))) > 0), \"Service\", \"Django\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0), \"Service\", \"$1\", \"db_instance\", \"(.*)\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0), \"Service\", \"default\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0), \"Service\", \"PgBouncer\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0), \"Service\", \"Redis\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django\\\\..*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__range])) > 0), \"Service\", \"Requests\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n)",
+          "expr": "sum by (Service, Status) (\n  label_replace((label_replace((((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m]))) or vector(0)) / ((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 0)) * 100 >= 5, \"Service\", \"Django\", \"\", \"\") * 0 + 1), \"Status\", \"Critical\", \"\", \"\")\n  or\n  label_replace((label_replace((((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m]))) or vector(0)) / ((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 0)) * 100 >= 1, \"Service\", \"Django\", \"\", \"\") * 0 + 1) unless (label_replace((((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m]))) or vector(0)) / ((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 0)) * 100 >= 5, \"Service\", \"Django\", \"\", \"\") * 0 + 1), \"Status\", \"Warning\", \"\", \"\")\n  or\n  label_replace(((label_replace(((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 0), \"Service\", \"Django\", \"\", \"\") * 0 + 1) unless (label_replace((((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m]))) or vector(0)) / ((sum(rate(calls_total{institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) or sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 0)) * 100 >= 1, \"Service\", \"Django\", \"\", \"\") * 0 + 1)), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum by (db_instance) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance!=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0), \"Service\", \"$1\", \"db_instance\", \"(.*)\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", db_instance=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0), \"Service\", \"default\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_address=\"pgbouncer\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", server_port=\"6432\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0), \"Service\", \"PgBouncer\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0), \"Service\", \"Redis\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n  or\n  label_replace((label_replace((sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django[.].*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0), \"Service\", \"Requests\", \"\", \"\") * 0 + 1), \"Status\", \"Healthy\", \"\", \"\")\n)",
           "format": "table",
           "instant": true,
           "legendFormat": "Status",
           "range": false,
-          "refId": "E"
+          "refId": "E",
+          "exemplar": false
         }
       ],
       "title": "Installed Services ",
@@ -931,7 +965,8 @@
           "expr": "sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind=\"SPAN_KIND_SERVER\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]))",
           "legendFormat": "Django (Web Requests)",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -942,7 +977,8 @@
           "expr": "sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]))",
           "legendFormat": "PostgreSQL (Database Queries)",
           "range": true,
-          "refId": "B"
+          "refId": "B",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -953,7 +989,8 @@
           "expr": "sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]))",
           "legendFormat": "Redis (Cache Commands)",
           "range": true,
-          "refId": "C"
+          "refId": "C",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -961,10 +998,11 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django\\\\..*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]))",
+          "expr": "sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]) or rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\"GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS\", span_name!~\"\u2699\ufe0f.*|django[.].*\", db_system=\"\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]))",
           "legendFormat": "External HTTP (Outbound Calls)",
           "range": true,
-          "refId": "D"
+          "refId": "D",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -975,7 +1013,8 @@
           "expr": "sum(rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval]))",
           "legendFormat": "AWS S3 / Boto3 (Storage Operations)",
           "range": true,
-          "refId": "E"
+          "refId": "E",
+          "exemplar": false
         }
       ],
       "title": "\u25c6 Throughput by Service (Operations / sec)",
@@ -1178,7 +1217,8 @@
           "expr": "((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
           "legendFormat": "PostgreSQL (Database)",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -1189,7 +1229,8 @@
           "expr": "((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
           "legendFormat": "Redis (Cache)",
           "range": true,
-          "refId": "B"
+          "refId": "B",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -1200,7 +1241,8 @@
           "expr": "((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
           "legendFormat": "AWS S3 / Boto3 (Storage)",
           "range": true,
-          "refId": "C"
+          "refId": "C",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -1211,7 +1253,8 @@
           "expr": "((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) / (((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
           "legendFormat": "External HTTP",
           "range": true,
-          "refId": "D"
+          "refId": "D",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -1222,7 +1265,8 @@
           "expr": "(((((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)))) / (((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) + ((((sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=~\"aws-s3|aws-api\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)) - (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))) > (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0)))) or (0.015 * (sum(rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[$__rate_interval])) or vector(0))))) > 0)) * 100",
           "legendFormat": "Django (Internal Application Logic)",
           "range": true,
-          "refId": "E"
+          "refId": "E",
+          "exemplar": false
         }
       ],
       "title": "+ % Time Spent by Downstream Service",

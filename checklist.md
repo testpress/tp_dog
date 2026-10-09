@@ -39,16 +39,15 @@ This document tracks the status of all application-level, service-level, and req
 - [x] **Filtering by application, service, endpoint, environment, status, and time range**
   - *Details*: Grafana dashboard template variables (`$project`, `$cluster`, `$service`, `$operation`, `$severity`, `$Filters`) + Grafana native time-range picker.
 - [x] **Performance comparison across different time periods**
-  - *Details*: 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`), current 5m rate/latency comparison, deviation percentage calculation, and anomaly detection PromQL expressions embedded directly in Grafana dashboards (`tp_trace_service_catalog.json`).
+  - *Details*: 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`), current 5m rate/latency comparison, deviation percentage calculation, and anomaly detection PromQL expressions embedded directly in Grafana dashboards (`service_catalog.json`).
 
 ---
 
 ### 2. Application and Service Dashboard
 
 - [x] **Main dashboard providing an overview of overall application & per-service performance**
-  - *Details*: `docker/grafana/dashboards/tp_trace_service_catalog.json` ("tp_trace APM — Service Catalog").
-- [x] **Per-service metrics summary table** (Service | Request Rate | Latency | Error Rate)
-  - *Details*: "Installed Components Matrix" and "Throughput Across Components" panels in `tp_trace_service_catalog.json` covering Django, Postgres Primary, Postgres Replicas, Redis, and External APIs.
+  - *Details*: `docker/grafana/dashboards/service_catalog.json` ("TP Trace — Application Performance Overview").
+  - *Details*: "Installed Components Matrix" and "Throughput Across Components" panels in `service_catalog.json` covering Django, Postgres Primary, Postgres Replicas, Redis, and External APIs.
 - [x] **Easy identification of bottleneck / service causing performance degradation**
   - *Details*: "% Time Spent by Downstream Service" breakdown panel, RPS anomaly alerts, and cross-service latency metrics.
 
@@ -99,7 +98,7 @@ This document tracks the status of all application-level, service-level, and req
 ### 7. Time-Period Comparison
 
 - [x] **Compare performance across different time periods** (Today vs. previous day, This week vs. previous week, Before vs. after deployment)
-  - *Details*: Prometheus 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`) compared against 5m live rate, deviation percentage calculation, and embedded anomaly detection panels in `tp_trace_service_catalog.json` and `tp_trace_needs_attention.json`. *(Requires ≥7 days of Prometheus history to be meaningful.)*
+  - *Details*: Prometheus 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`) compared against 5m live rate, deviation percentage calculation, and embedded anomaly detection panels in `service_catalog.json` and `operational_issues.json`. *(Requires ≥7 days of Prometheus history to be meaningful.)*
 - [x] **Identify changes in Throughput, Latency, Error Rate, Request Volume**
   - *Details*: Global RPS anomaly list and anomaly threshold alerts (>50% anomaly, >200% severe anomaly).
 

@@ -10,12 +10,12 @@
     {
       "asDropdown": false,
       "icon": "arrow-left",
-      "includeVars": true,
+      "includeVars": false,
       "keepTime": true,
       "targetBlank": false,
       "title": "\u2190 Back to Service Catalog",
       "type": "link",
-      "url": "/d/tp-trace-project-catalog"
+      "url": "/d/tp-trace-project-catalog?${project:queryparam}&${cluster:queryparam}&${institute:queryparam}&${__url_time_range}"
     },
     {
       "asDropdown": false,
@@ -35,7 +35,7 @@
       "targetBlank": false,
       "title": "PostgreSQL",
       "type": "link",
-      "url": "/d/generic-service-overview?var-service=postgresql"
+      "url": "/d/generic-service-overview?var-service=postgres"
     },
     {
       "asDropdown": false,
@@ -107,7 +107,7 @@
         "type": "datasource"
       },
       {
-        "allValue": ".*",
+        "allValue": null,
         "current": {
           "selected": true,
           "text": [
@@ -265,7 +265,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Needs Attention \u2014 Operational Issues Overview",
+  "title": "Application Anomalies & Incidents \u2014 Investigation",
   "uid": "tp-trace-needs-attention",
   "version": 1005,
   "panels": [
@@ -356,7 +356,8 @@
           "expr": "((count((((sum by (project_name, cluster_name, http_route, http_method) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", http_route!~\"^[0-9]{3}$\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m])) / sum by (project_name, cluster_name, http_route, http_method) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", http_route!~\"^[0-9]{3}$\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) * 100) > 2)) or vector(0)) + (count((((sum by (project_name, cluster_name) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m])) / sum by (project_name, cluster_name) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) * 100) > 1)) or vector(0)) + (count((((sum by (project_name, cluster_name) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\", error=\"true\"}[5m])) / sum by (project_name, cluster_name) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) * 100) > 1)) or vector(0)))",
           "legendFormat": "Critical",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "links": [
@@ -436,7 +437,8 @@
           "expr": "(count(histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) and (((sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) / (sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0)) * 100) > 30) and (histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > (2 * histogram_quantile(0.50, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[30m]))))) and (histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 250)) or vector(0)) + (count(histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) and (((sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) / (sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0)) * 100) > 20) and (histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > (2 * histogram_quantile(0.50, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=\"redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[30m]))))) and (histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 250)) or vector(0)) + (count(histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) and ((100 - ((((sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", db_system=~\"postgresql|postgres|redis\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) or (0 * sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])))) + (sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", span_name=~\".*HTTP.*\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) or (0 * sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))))) / (sum by (project_name, cluster_name) (rate(apm_duration_milliseconds_sum{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m])) > 0)) * 100)) > 60) and (histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > (2 * histogram_quantile(0.50, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[30m]))))) and (histogram_quantile(0.95, sum by (le, project_name, cluster_name) (rate(apm_duration_milliseconds_bucket{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind!=\"SPAN_KIND_INTERNAL\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))) > 500)) or vector(0))",
           "legendFormat": "Warning",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "links": [
@@ -516,7 +518,8 @@
           "expr": "count(((((max_over_time(sum by (project_name, cluster_name, http_route, http_method) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind=\"SPAN_KIND_SERVER\", http_route!~\"^[0-9]{3}$\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))[5m:1m]) - quantile_over_time(0.5, sum by (project_name, cluster_name, http_route, http_method) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind=\"SPAN_KIND_SERVER\", http_route!~\"^[0-9]{3}$\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))[1h:1m])) / quantile_over_time(0.5, sum by (project_name, cluster_name, http_route, http_method) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind=\"SPAN_KIND_SERVER\", http_route!~\"^[0-9]{3}$\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))[1h:1m])) * 100) > 200) and (max_over_time(sum by (project_name, cluster_name, http_route, http_method) (rate(apm_calls_total{instance!=\"\", institute_subdomain=~\"${institute:regex}\", normalized_service=\"django\", span_kind=\"SPAN_KIND_SERVER\", http_route!~\"^[0-9]{3}$\", project_name=~\"${project:regex}\", cluster_name=~\"${cluster:regex}\"}[5m]))[5m:1m]) > 20)) or vector(0)",
           "legendFormat": "Info",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "links": [
@@ -699,7 +702,7 @@
                 "value": [
                   {
                     "title": "Investigate \u2192",
-                    "url": "${__data.fields.TargetUrl}&var-project=${__data.fields.project_name}&var-cluster=${__data.fields.cluster_name}&var-operation=${__data.fields.http_method}%20${__data.fields.http_route}&${__url_time_range}",
+                    "url": "${__data.fields.TargetUrl}var-project=${__data.fields.project_name}&var-cluster=${__data.fields.cluster_name}&var-operation=${__data.fields.http_method}%20${__data.fields.http_route}&${__url_time_range}",
                     "targetBlank": false
                   }
                 ]
@@ -807,7 +810,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -819,7 +823,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "A_base"
+          "refId": "A_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -831,7 +836,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "A_contrib"
+          "refId": "A_contrib",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -843,7 +849,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "B"
+          "refId": "B",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -855,7 +862,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "B_base"
+          "refId": "B_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -867,7 +875,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "B_contrib"
+          "refId": "B_contrib",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -879,7 +888,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "C"
+          "refId": "C",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -891,7 +901,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "C_base"
+          "refId": "C_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -903,7 +914,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "C_contrib"
+          "refId": "C_contrib",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -915,7 +927,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "D"
+          "refId": "D",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -927,7 +940,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "E"
+          "refId": "E",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -939,7 +953,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "F"
+          "refId": "F",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -951,7 +966,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "G"
+          "refId": "G",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -963,7 +979,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "G_base"
+          "refId": "G_base",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -975,7 +992,8 @@
           "format": "table",
           "instant": true,
           "range": false,
-          "refId": "G_curr"
+          "refId": "G_curr",
+          "exemplar": false
         }
       ],
       "title": "All Detected Operational Issues",

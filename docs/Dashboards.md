@@ -66,7 +66,7 @@ navigate between them, and how to execute end-to-end incident triage.
 ### 1. Needs Attention — Operational Issues Overview
 
 * **UID**: `tp_trace-needs-attention` (v1003) · 5 panels (3 stat, 2 dynamic-text)
-* **Source**: [`tp_trace_needs_attention.json`](../docker/grafana/dashboards/tp_trace_needs_attention.json)
+* **Source**: [`operational_issues.json`](../docker/grafana/dashboards/Supporting Dashboards/operational_issues.json)
 * **Purpose**: Primary incident triage board. Surfaces any service or operation currently failing thresholds.
 * **Key Panels**:
   * **Critical / Warning / Info counters** — three stat panels, each counting
@@ -99,10 +99,10 @@ navigate between them, and how to execute end-to-end incident triage.
 
 ---
 
-### 2. tp_trace APM — Service Catalog
-
+### 2. TP Trace — Application Performance Overview
+ 
 * **UID**: `tp_trace-project-catalog` (v1003) · 5 panels (1 dynamic-text, 1 table, 2 timeseries)
-* **Source**: [`tp_trace_service_catalog.json`](../docker/grafana/dashboards/tp_trace_service_catalog.json)
+* **Source**: [`service_catalog.json`](../docker/grafana/dashboards/service_catalog.json)
 * **Purpose**: Single-pane-of-glass overview across every instrumented service.
 * **Key Panels**:
   * **Active Issues & Anomaly Detection** — the same A–G detection logic as
@@ -132,7 +132,7 @@ automatically.
 ### 3. Generic Service Overview
 
 * **UID**: `generic-service-overview` (v1005) · 5 panels (3 timeseries, 1 table, 1 row)
-* **Source**: [`tp_trace_generic_service_overview.json`](../docker/grafana/dashboards/tp_trace_generic_service_overview.json)
+* **Source**: [`service_overview.json`](../docker/grafana/dashboards/Supporting Dashboards/service_overview.json)
 * **Purpose**: Per-service health for **any** service. This single dashboard
   replaced the Django / PostgreSQL / Redis overview dashboards.
 * **Key Panels**:
@@ -154,7 +154,7 @@ one off-nominal value that would otherwise appear as a service.
 ### 4. Generic Operation Details
 
 * **UID**: `generic-operation-details` (v1011) · 6 panels (3 timeseries, 1 table, 2 rows)
-* **Source**: [`tp_trace_generic_operation_details.json`](../docker/grafana/dashboards/tp_trace_generic_operation_details.json)
+* **Source**: [`operation_details.json`](../docker/grafana/dashboards/Supporting Dashboards/operation_details.json)
 * **Purpose**: Deep-dive on a single operation within a single service. This
   replaced the Django Endpoint / PostgreSQL Query / Redis Command dashboards.
 * **Key Panels**:
@@ -261,8 +261,8 @@ Tempo span names are prefixed `🔹` for pooled and `🟢` for direct PostgreSQL
 
 | I want to… | Open |
 | :--- | :--- |
-| Triage an incident | [`tp_trace-needs-attention`](../docker/grafana/dashboards/tp_trace_needs_attention.json) |
-| See overall service health | [`tp_trace-project-catalog`](../docker/grafana/dashboards/tp_trace_service_catalog.json) |
-| Drill into any service | [`generic-service-overview`](../docker/grafana/dashboards/tp_trace_generic_service_overview.json) |
-| Drill into any operation | [`generic-operation-details`](../docker/grafana/dashboards/tp_trace_generic_operation_details.json) |
+| Triage an incident | [`operational_issues`](../docker/grafana/dashboards/Supporting Dashboards/operational_issues.json) |
+| See overall service health | [`service_catalog`](../docker/grafana/dashboards/service_catalog.json) |
+| Drill into any service | [`service_overview`](../docker/grafana/dashboards/Supporting Dashboards/service_overview.json) |
+| Drill into any operation | [`operation_details`](../docker/grafana/dashboards/Supporting Dashboards/operation_details.json) |
 | Inspect a raw trace | Grafana **Explore** → Tempo datasource |

@@ -1,12 +1,13 @@
 apiVersion: 1
 
 providers:
-  - name: 'tp_trace APM Dashboards'
+  - name: 'TP Trace Dashboards'
     orgId: 1
-    folder: 'tp_trace APM'
+    folder: 'TP Trace Dashboards'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
       path: /etc/grafana/dashboards
+      foldersFromFilesStructure: true

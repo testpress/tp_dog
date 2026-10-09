@@ -30,12 +30,12 @@
     {
       "asDropdown": false,
       "icon": "arrow-left",
-      "includeVars": true,
+      "includeVars": false,
       "keepTime": true,
       "targetBlank": false,
       "title": "\u2190 Back to Service Catalog",
       "type": "link",
-      "url": "/d/tp-trace-project-catalog"
+      "url": "/d/tp-trace-project-catalog?${project:queryparam}&${cluster:queryparam}&${institute:queryparam}&${__url_time_range}"
     },
     {
       "asDropdown": false,
@@ -134,11 +134,12 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "count(up{source=\"otelcol-telemetry\", net_host_name=~\"(${instance:regex})\"} == 1) or vector(0)",
+          "expr": "count(up{source=\"otelcol-telemetry\", net_host_name=~\"(${instance:pipe})\"} == 1) or vector(0)",
           "instant": true,
           "legendFormat": "Healthy",
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "Healthy Collectors",
@@ -204,11 +205,12 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "count(sum by (instance) (rate({__name__=~\"otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*|otelcol_processor_dropped_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) > 0) or vector(0)",
+          "expr": "count(sum by (instance) (rate({__name__=~\"otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*|otelcol_processor_dropped_spans.*\", net_host_name=~\"(${instance:pipe})\"}[2m])) > 0) or vector(0)",
           "instant": true,
           "legendFormat": "Dropping",
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "Dropping Telemetry",
@@ -273,11 +275,12 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "avg((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:regex})\"}[2m]) / 0.5) * 100) or vector(0)",
+          "expr": "avg((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:pipe})\"}[2m]) / 0.5) * 100) or vector(0)",
           "instant": false,
           "legendFormat": "Avg CPU",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "Avg CPU Usage",
@@ -342,11 +345,12 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "avg((otelcol_process_memory_rss{net_host_name=~\"(${instance:regex})\"} / 402653184) * 100) or vector(0)",
+          "expr": "avg((otelcol_process_memory_rss{net_host_name=~\"(${instance:pipe})\"} / 402653184) * 100) or vector(0)",
           "instant": false,
           "legendFormat": "Avg Memory",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "Avg Memory Usage",
@@ -602,12 +606,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) (up{source=\"otelcol-telemetry\", net_host_name=~\"(${instance:regex})\"})",
+          "expr": "max by (net_host_name, collector_alias) (up{source=\"otelcol-telemetry\", net_host_name=~\"(${instance:pipe})\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "range": false,
-          "refId": "Status"
+          "refId": "Status",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -615,12 +620,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) ((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:regex})\"}[2m]) / 0.5) * 100)",
+          "expr": "max by (net_host_name, collector_alias) ((rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:pipe})\"}[2m]) / 0.5) * 100)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "range": false,
-          "refId": "CPU"
+          "refId": "CPU",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -628,12 +634,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"(${instance:regex})\"})",
+          "expr": "max by (net_host_name, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"(${instance:pipe})\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "range": false,
-          "refId": "Memory"
+          "refId": "Memory",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -641,12 +648,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"(${instance:pipe})\"}[2m])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "range": false,
-          "refId": "Ingest"
+          "refId": "Ingest",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -654,12 +662,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "expr": "sum by (net_host_name, collector_alias) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"(${instance:pipe})\"}[2m])) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "range": false,
-          "refId": "Export"
+          "refId": "Export",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -667,12 +676,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"}) * 100) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "expr": "max by (net_host_name, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:pipe})\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:pipe})\"}) * 100) or (0 * max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"}))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "range": false,
-          "refId": "Queue"
+          "refId": "Queue",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -680,12 +690,13 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"})",
+          "expr": "max by (net_host_name, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "range": false,
-          "refId": "Uptime"
+          "refId": "Uptime",
+          "exemplar": false
         }
       ],
       "title": "Collectors (App Servers)",
@@ -852,10 +863,11 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"(${instance:regex})\"})",
+          "expr": "sum by (instance, collector_alias) (otelcol_process_memory_rss{net_host_name=~\"(${instance:pipe})\"})",
           "legendFormat": "{{collector_alias}} {{instance}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         },
         {
           "datasource": {
@@ -866,7 +878,8 @@
           "expr": "vector(402653184)",
           "legendFormat": "Limit (384 MiB)",
           "range": true,
-          "refId": "B"
+          "refId": "B",
+          "exemplar": false
         }
       ],
       "title": "1. Collector Memory (RSS vs 384 MiB Limit)",
@@ -958,10 +971,11 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "(sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:regex})\"}[2m])) / 0.5) * 100",
+          "expr": "(sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_process_cpu_seconds.*\", net_host_name=~\"(${instance:pipe})\"}[2m])) / 0.5) * 100",
           "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "2. Collector CPU Usage (%)",
@@ -1051,10 +1065,11 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_receiver_accepted_spans.*\", net_host_name=~\"(${instance:pipe})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"}))",
           "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "3. Spans Ingested Rate (req/s)",
@@ -1144,10 +1159,11 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_exporter_sent_spans.*\", net_host_name=~\"(${instance:pipe})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"}))",
           "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "4. Spans Exported Rate (req/s)",
@@ -1240,10 +1256,11 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_processor_dropped_spans.*|otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*\", net_host_name=~\"(${instance:regex})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "expr": "sum by (collector_alias, net_host_name) (rate({__name__=~\"otelcol_processor_dropped_spans.*|otelcol_receiver_refused_spans.*|otelcol_exporter_send_failed_spans.*\", net_host_name=~\"(${instance:pipe})\"}[2m])) or (0 * sum by (collector_alias, net_host_name) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"}))",
           "legendFormat": "{{collector_alias}} ({{net_host_name}})",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "5. Spans Dropped / Refused (req/s)",
@@ -1343,10 +1360,11 @@
             "uid": "_IY366MMk"
           },
           "editorMode": "code",
-          "expr": "sum by (instance, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:regex})\"}) * 100) or (0 * sum by (instance, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:regex})\"}))",
+          "expr": "sum by (instance, collector_alias) ((otelcol_exporter_queue_size{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:pipe})\"} / otelcol_exporter_queue_capacity{exporter=~\"(?i).*tempo.*\", net_host_name=~\"(${instance:pipe})\"}) * 100) or (0 * sum by (instance, collector_alias) (otelcol_process_uptime_total{net_host_name=~\"(${instance:pipe})\"}))",
           "legendFormat": "{{collector_alias}} {{instance}}",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "exemplar": false
         }
       ],
       "title": "6. Tempo Queue Utilization (%)",
@@ -3072,9 +3090,6 @@
           "scale": "exponential",
           "scheme": "Reds",
           "steps": 57
-        },
-        "exemplars": {
-          "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
           "le": 1e-09
@@ -6353,7 +6368,8 @@
               "instant": false,
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "exemplar": false
             }
           ],
           "title": "RPC server responses by GRPC status code (receivers)",
@@ -6672,7 +6688,8 @@
               "instant": false,
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "exemplar": false
             }
           ],
           "title": "RPC client responses by GRPC status code (exporters)",
@@ -6721,9 +6738,6 @@
               "scale": "exponential",
               "scheme": "Reds",
               "steps": 25
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
             },
             "filterValues": {
               "le": 1e-09
@@ -6810,9 +6824,6 @@
               "scheme": "Reds",
               "steps": 25
             },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
             "filterValues": {
               "le": 1e-09
             },
@@ -6898,9 +6909,6 @@
               "scheme": "Reds",
               "steps": 25
             },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
             "filterValues": {
               "le": 0.1
             },
@@ -6985,9 +6993,6 @@
               "scale": "exponential",
               "scheme": "Reds",
               "steps": 25
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
             },
             "filterValues": {
               "le": 0.1
@@ -7084,9 +7089,6 @@
               "scheme": "Reds",
               "steps": 25
             },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
             "filterValues": {
               "le": 1e-09
             },
@@ -7167,9 +7169,6 @@
               "scale": "exponential",
               "scheme": "Reds",
               "steps": 25
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
             },
             "filterValues": {
               "le": 1e-09
@@ -7601,7 +7600,7 @@
         "type": "custom"
       },
       {
-        "allValue": ".*",
+        "allValue": null,
         "current": {
           "selected": true,
           "text": [
@@ -8033,7 +8032,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "OTel Collector Fleet & Metrics",
+  "title": "OpenTelemetry Collector \u2014 Health, Resource Usage & Metrics",
   "uid": "tp-trace-otel-collector-health",
   "version": 6
 }
