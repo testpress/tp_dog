@@ -20,7 +20,7 @@ services:
     ports:
       # Remote collector pushes traces here
       - "4327:4317"
-      - "4318:4318"
+      - "4328:4318"
       # Query API (Grafana / operators)
       - "3200:3200"
 
