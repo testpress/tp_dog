@@ -1,6 +1,6 @@
-# tp_dog SDK v3 — Observability Requirements Checklist
+# tp_trace SDK v3 — Observability Requirements Checklist
 
-This document tracks the status of all application-level, service-level, and request-level observability requirements specified for **tp_dog SDK v3**.
+This document tracks the status of all application-level, service-level, and request-level observability requirements specified for **tp_trace SDK v3**.
 
 ## Summary Table
 
@@ -25,7 +25,7 @@ This document tracks the status of all application-level, service-level, and req
 - [x] **Application & service-level latency, throughput, and error metrics**
   - *Details*: RED metrics (`apm_calls_total`, `apm_duration_milliseconds_bucket`) automatically derived from SDK spans via the OpenTelemetry Collector's `spanmetrics` connector and exported to Prometheus.
 - [x] **Endpoint-level request volume, throughput, latency, and error analysis**
-  - *Details*: Low-cardinality URL route normalization (`_normalize_route`) in Django integration (`src/tp_dog/integrations/django/request.py`), aggregated per endpoint path in Prometheus and displayed in the generic service/operation dashboards (`$service=django`, `$operation=GET /api/products/…`).
+  - *Details*: Low-cardinality URL route normalization (`_normalize_route`) in Django integration (`src/tp_trace/integrations/django/request.py`), aggregated per endpoint path in Prometheus and displayed in the generic service/operation dashboards (`$service=django`, `$operation=GET /api/products/…`).
 - [x] **Visibility into key services**:
   - [x] **Django application server**: Request handlers (`django.request`), middleware (`django.middleware.*`), views (`🐍 django.view.*`), templates (`🎨 django.template:*`), cache operations (`django.cache.*`), and auth events (`🔐 django.auth.*`).
   - [x] **PostgreSQL primary database**: Driver cursor wrapping, sanitized SQL queries, `db.role="primary"`, PgBouncer connection pool topology detection (`🔵`).
@@ -39,16 +39,16 @@ This document tracks the status of all application-level, service-level, and req
 - [x] **Filtering by application, service, endpoint, environment, status, and time range**
   - *Details*: Grafana dashboard template variables (`$project`, `$cluster`, `$service`, `$operation`, `$severity`, `$Filters`) + Grafana native time-range picker.
 - [x] **Performance comparison across different time periods**
-  - *Details*: 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`), current 5m rate/latency comparison, deviation percentage calculation, and anomaly detection PromQL expressions embedded directly in Grafana dashboards (`tp_dog_service_catalog.json`).
+  - *Details*: 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`), current 5m rate/latency comparison, deviation percentage calculation, and anomaly detection PromQL expressions embedded directly in Grafana dashboards (`tp_trace_service_catalog.json`).
 
 ---
 
 ### 2. Application and Service Dashboard
 
 - [x] **Main dashboard providing an overview of overall application & per-service performance**
-  - *Details*: `docker/grafana/dashboards/tp_dog_service_catalog.json` ("tp_dog APM — Service Catalog").
+  - *Details*: `docker/grafana/dashboards/tp_trace_service_catalog.json` ("tp_trace APM — Service Catalog").
 - [x] **Per-service metrics summary table** (Service | Request Rate | Latency | Error Rate)
-  - *Details*: "Installed Components Matrix" and "Throughput Across Components" panels in `tp_dog_service_catalog.json` covering Django, Postgres Primary, Postgres Replicas, Redis, and External APIs.
+  - *Details*: "Installed Components Matrix" and "Throughput Across Components" panels in `tp_trace_service_catalog.json` covering Django, Postgres Primary, Postgres Replicas, Redis, and External APIs.
 - [x] **Easy identification of bottleneck / service causing performance degradation**
   - *Details*: "% Time Spent by Downstream Service" breakdown panel, RPS anomaly alerts, and cross-service latency metrics.
 
@@ -57,7 +57,7 @@ This document tracks the status of all application-level, service-level, and req
 ### 3. Service-Level Details
 
 - [x] **Dedicated service pages accessible via service selection**
-  - *Details*: Interactive links from the Service Catalog dashboard (`tp_dog-project-catalog`) open `/d/generic-service-overview?var-service=<service>`. The six former component-specific dashboards were consolidated into this one generic dashboard.
+  - *Details*: Interactive links from the Service Catalog dashboard (`tp_trace-project-catalog`) open `/d/generic-service-overview?var-service=<service>`. The six former component-specific dashboards were consolidated into this one generic dashboard.
 - [x] **Django, PostgreSQL, PgBouncer, and Redis Service Pages**
   - *Details*: All four are served by `generic-service-overview.json` — each is a value of `$service` (`django`, `postgresql`, `pgbouncer`, `redis`, `requests`). The dashboard shows operations with Requests, Error Rate, Throughput, and P50/P95/P99 Latency, plus the Tempo trace list. No per-service dashboard is required.
 
@@ -99,7 +99,7 @@ This document tracks the status of all application-level, service-level, and req
 ### 7. Time-Period Comparison
 
 - [x] **Compare performance across different time periods** (Today vs. previous day, This week vs. previous week, Before vs. after deployment)
-  - *Details*: Prometheus 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`) compared against 5m live rate, deviation percentage calculation, and embedded anomaly detection panels in `tp_dog_service_catalog.json` and `tp_dog_needs_attention.json`. *(Requires ≥7 days of Prometheus history to be meaningful.)*
+  - *Details*: Prometheus 7-day median rolling baseline queries (`quantile_over_time(0.5, apm_calls_total[7d:1h])`) compared against 5m live rate, deviation percentage calculation, and embedded anomaly detection panels in `tp_trace_service_catalog.json` and `tp_trace_needs_attention.json`. *(Requires ≥7 days of Prometheus history to be meaningful.)*
 - [x] **Identify changes in Throughput, Latency, Error Rate, Request Volume**
   - *Details*: Global RPS anomaly list and anomaly threshold alerts (>50% anomaly, >200% severe anomaly).
 
@@ -108,7 +108,7 @@ This document tracks the status of all application-level, service-level, and req
 ### 8. Sampling and Retention
 
 - [x] **Configurable trace sampling**
-  - *Details*: Configurable `sample_rate` parameter in `tp_dog.init()` and `TP_DOG_SAMPLE_RATE` / `OTEL_TRACES_SAMPLER_ARG` env vars, plus per-route overrides via `TP_DOG_ENDPOINT_SAMPLE_RULES` and `TP_DOG_IGNORE_ENDPOINTS`, using the OpenTelemetry `TraceIdRatioBased` sampler under a `ParentBased` wrapper. *(Because RED metrics are derived from the sampled population, sampling policy must account for metric fidelity, not just storage cost.)*
+  - *Details*: Configurable `sample_rate` parameter in `tp_trace.init()` and `TP_DOG_SAMPLE_RATE` / `OTEL_TRACES_SAMPLER_ARG` env vars, plus per-route overrides via `TP_DOG_ENDPOINT_SAMPLE_RULES` and `TP_DOG_IGNORE_ENDPOINTS`, using the OpenTelemetry `TraceIdRatioBased` sampler under a `ParentBased` wrapper. *(Because RED metrics are derived from the sampled population, sampling policy must account for metric fidelity, not just storage cost.)*
 - [x] **Data retention**
   - *Details*: Managed at the backend storage tier — Tempo `block_retention` (currently 336h / 14 days) and the Prometheus TSDB retention flag. *(No Prometheus retention flag is currently set, so it uses the 15-day / 2 GB default.)*
 
@@ -118,7 +118,7 @@ This document tracks the status of all application-level, service-level, and req
 
 - [x] **End-to-End Investigation Flow**: Needs Attention → Service Catalog → Select Service → Select Operation → Instance List → Select Instance → Trace Waterfall → Root Cause.
   - *Details*: Fully wired navigation path across Grafana dashboards:
-    1. `tp_dog-needs-attention` (triage) or `tp_dog-project-catalog` (service health)
+    1. `tp_trace-needs-attention` (triage) or `tp_trace-project-catalog` (service health)
     2. Click service row → `generic-service-overview?var-service=<service>`
     3. Click operation row → `generic-operation-details?var-service=<service>&var-operation=<operation>`
     4. Click trace instance → Tempo Trace Waterfall in Grafana.

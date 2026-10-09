@@ -43,9 +43,9 @@ if not settings.configured:
     )
     django.setup()
 
-import tp_dog
-from tp_dog.integrations.django import DjangoIntegration
-from tp_dog.integrations.postgres import PostgresIntegration
+import tp_trace
+from tp_trace.integrations.django import DjangoIntegration
+from tp_trace.integrations.postgres import PostgresIntegration
 
 
 class MockRawCursor:
@@ -94,8 +94,8 @@ class MockDatabaseConnection:
 
 @pytest.fixture(autouse=True)
 def clean_sdk_and_postgres():
-    tp_dog._reset_for_testing()
-    from tp_dog.integrations import get_integration_manager
+    tp_trace._reset_for_testing()
+    from tp_trace.integrations import get_integration_manager
 
     mgr = get_integration_manager()
     mgr.apply_integrations()
@@ -104,13 +104,13 @@ def clean_sdk_and_postgres():
         mgr.uninstrument_all()
     except Exception:
         pass
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
 
 
 def test_select_creates_span():
     """Verify executing a query through CursorWrapper creates a CLIENT span with connection attributes."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
     raw_cursor = MockRawCursor(rowcount=5)
     mock_db = MockDatabaseConnection(
@@ -148,7 +148,7 @@ def test_select_creates_span():
 def test_sanitized_sql_in_attributes():
     """Verify raw parameters and values are sanitized in db.statement."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
     raw_cursor = MockRawCursor()
     mock_db = MockDatabaseConnection(alias="default")
@@ -169,7 +169,7 @@ def test_sanitized_sql_in_attributes():
 def test_primary_role_detected():
     """Verify primary role is detected for default / non-replica database aliases."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
     raw_cursor = MockRawCursor()
     mock_db = MockDatabaseConnection(alias="default")
@@ -185,7 +185,7 @@ def test_primary_role_detected():
 def test_replica_role_detected():
     """Verify replica role and custom peer.service are detected for slave/read aliases."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
     raw_cursor = MockRawCursor()
     mock_db = MockDatabaseConnection(alias="slave1db", host="pg-replica.prod")
@@ -205,7 +205,7 @@ def test_replica_role_detected():
 def test_db_role_map_and_false_positive_prevention():
     """Verify thread_pool is not falsely identified as replica, and db_role_map takes precedence."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="postgres-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -273,7 +273,7 @@ def test_replica_alias_heuristic_contract(alias, expected):
     ``db_role_map`` for those.
     """
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-role-contract", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-role-contract", exporter=exporter, export_batch=False)
 
     CursorWrapper(MockRawCursor(), MockDatabaseConnection(alias=alias)).execute("SELECT 1")
 
@@ -284,7 +284,7 @@ def test_replica_alias_heuristic_contract(alias, expected):
 def test_reentrancy_guard_prevents_duplicate_spans():
     """Verify that re-entrant cursor executions do not create duplicate spans."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
     class ReentrantRawCursor:
         def __init__(self):
@@ -311,7 +311,7 @@ def test_reentrancy_guard_prevents_duplicate_spans():
 def test_query_exception_records_error():
     """Verify database exceptions are recorded with status ERROR and error attributes."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
     raw_cursor = MockRawCursor(raise_exc=RuntimeError("connection deadlock detected"))
     mock_db = MockDatabaseConnection(alias="default")
@@ -334,7 +334,7 @@ def test_query_exception_records_error():
 def test_executemany_creates_span():
     """Verify executemany creates a CLIENT span with correct operation."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
     raw_cursor = MockRawCursor(rowcount=3)
     mock_db = MockDatabaseConnection(alias="default")
@@ -371,9 +371,9 @@ urlpatterns = [
 
 def test_uninstrument_and_idempotency():
     """Verify clean uninstrumentation restores original methods and instrument is idempotent."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False, auto_patch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False, auto_patch=False)
 
     integration = PostgresIntegration()
     assert integration.instrument() is True
@@ -396,12 +396,12 @@ def test_uninstrument_and_idempotency():
 
 
 def test_patch_all_enables_postgres():
-    """Verify tp_dog.patch_all() auto-discovers and instruments postgres."""
-    tp_dog._reset_for_testing()
+    """Verify tp_trace.patch_all() auto-discovers and instruments postgres."""
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="postgres-test-svc", exporter=exporter, export_batch=False)
 
-    enabled = tp_dog.patch_all()
+    enabled = tp_trace.patch_all()
     assert "postgres" in enabled
 
     raw_cursor = MockRawCursor()
@@ -417,10 +417,10 @@ def test_patch_all_enables_postgres():
 
 def test_django_request_waterfall_with_db():
     """Verify full waterfall: django.request -> django.view -> postgres.query."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="waterfall-test", exporter=exporter, export_batch=False)
-    tp_dog.patch_all()
+    tp_trace.init(project_name="waterfall-test", exporter=exporter, export_batch=False)
+    tp_trace.patch_all()
 
     from django.urls import clear_url_caches
     from django.core.handlers.wsgi import WSGIHandler
@@ -469,7 +469,7 @@ def test_is_installed_does_not_claim_psycopg3_support():
     Probing psycopg3 made a psycopg3-only host report "🔵 instrumented"
     while emitting no spans at all, which is worse than reporting nothing.
     """
-    import tp_dog.integrations.postgres.integration as pg_int
+    import tp_trace.integrations.postgres.integration as pg_int
 
     class _Psycopg3OnlyHost:
         """A non-Django host on psycopg3: psycopg imports, nothing else does."""
@@ -498,7 +498,7 @@ def test_django_path_is_driver_agnostic():
     """
     import inspect
 
-    from tp_dog.integrations.postgres import cursor as cur
+    from tp_trace.integrations.postgres import cursor as cur
 
     source = inspect.getsource(cur)
     # Covers "import psycopg2" as well, since it contains "import psycopg".
@@ -509,7 +509,7 @@ def test_django_path_is_driver_agnostic():
 
 def test_extract_operation_fallback():
     """Verify operation extraction falls back to QUERY for empty or unknown SQL."""
-    from tp_dog.integrations.postgres.cursor import extract_operation
+    from tp_trace.integrations.postgres.cursor import extract_operation
 
     assert extract_operation("") == "QUERY"
     assert extract_operation(None) == "QUERY"
@@ -521,7 +521,7 @@ def test_extract_operation_fallback():
 
 def test_extract_query_summary():
     """Verify query summary extracts operation and target table correctly."""
-    from tp_dog.integrations.postgres.cursor import extract_query_summary
+    from tp_trace.integrations.postgres.cursor import extract_query_summary
 
     assert extract_query_summary("") == "QUERY"
     assert extract_query_summary(None) == "QUERY"
@@ -541,14 +541,14 @@ def test_db_span_carries_alias_and_physical_db_name():
 
     slave3db (alias) -> testpress (physical database)
     """
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="postgres-test-svc",
         exporter=exporter,
         export_batch=False,
     )
-    from tp_dog.integrations import get_integration_manager
+    from tp_trace.integrations import get_integration_manager
     mgr = get_integration_manager()
     mgr.apply_integrations()
 
@@ -579,14 +579,14 @@ def test_db_span_carries_alias_and_physical_db_name():
 
 def test_pgbouncer_nested_spans():
     """Verify queries routed through PgBouncer produce an outer pool-wait span and an inner DB execution span."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="pgbouncer-test-svc",
         exporter=exporter,
         export_batch=False,
     )
-    from tp_dog.integrations import get_integration_manager
+    from tp_trace.integrations import get_integration_manager
     mgr = get_integration_manager()
     mgr.apply_integrations()
 
@@ -640,14 +640,14 @@ def test_pgbouncer_nested_spans():
 
 def test_pgbouncer_execute_wrapper_nested_spans():
     """Verify execute_wrapper produces nested pool-wait and DB execute spans for PgBouncer."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="pgbouncer-exec-svc",
         exporter=exporter,
         export_batch=False,
     )
-    from tp_dog.integrations.postgres.cursor import tp_dog_django_db_execute_wrapper
+    from tp_trace.integrations.postgres.cursor import tp_trace_django_db_execute_wrapper
 
     mock_db = MockDatabaseConnection(
         alias="default",
@@ -664,7 +664,7 @@ def test_pgbouncer_execute_wrapper_nested_spans():
         executed.append((sql, params))
         return "ok"
 
-    res = tp_dog_django_db_execute_wrapper(
+    res = tp_trace_django_db_execute_wrapper(
         mock_exec,
         "SELECT id FROM auth_user WHERE is_staff = 1",
         (1,),
@@ -690,11 +690,11 @@ def test_pgbouncer_execute_wrapper_nested_spans():
 
 def test_suppress_driver_instrumentation_prevents_duplicate_spans():
     """Verify suppress_db_instrumentation sets OTel suppression key to prevent duplicate driver spans."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="single-span-policy-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="single-span-policy-svc", exporter=exporter, export_batch=False)
 
-    from tp_dog.integrations.postgres.cursor import suppress_db_instrumentation, _SUPPRESS_KEY
+    from tp_trace.integrations.postgres.cursor import suppress_db_instrumentation, _SUPPRESS_KEY
     from opentelemetry.context import get_value
 
     # Outside context: not suppressed
@@ -707,11 +707,11 @@ def test_suppress_driver_instrumentation_prevents_duplicate_spans():
 
 def test_django_native_execute_wrapper_creates_span():
     """Verify executing via Django native execute_wrapper creates a span with correct attributes."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="native-wrapper-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="native-wrapper-svc", exporter=exporter, export_batch=False)
 
-    from tp_dog.integrations.postgres.cursor import tp_dog_django_db_execute_wrapper
+    from tp_trace.integrations.postgres.cursor import tp_trace_django_db_execute_wrapper
 
     mock_db = MockDatabaseConnection(
         alias="slave1",
@@ -726,7 +726,7 @@ def test_django_native_execute_wrapper_creates_span():
         return mock_cursor.execute(sql, params)
 
     context = {"connection": mock_db, "cursor": mock_cursor}
-    tp_dog_django_db_execute_wrapper(mock_execute, "SELECT id FROM items WHERE active = 1", None, False, context)
+    tp_trace_django_db_execute_wrapper(mock_execute, "SELECT id FROM items WHERE active = 1", None, False, context)
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
@@ -739,13 +739,13 @@ def test_django_native_execute_wrapper_creates_span():
 
 def test_no_duplicate_spans_when_cursorwrapper_and_execute_wrappers_coexist():
     """Verify that when CursorWrapper.execute and connection.execute_wrappers coexist, only 1 span is created."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="no-dup-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="no-dup-svc", exporter=exporter, export_batch=False)
 
-    from tp_dog.integrations.postgres.cursor import (
+    from tp_trace.integrations.postgres.cursor import (
         traced_django_cursor_exec,
-        tp_dog_django_db_execute_wrapper,
+        tp_trace_django_db_execute_wrapper,
     )
 
     mock_db = MockDatabaseConnection(
@@ -769,7 +769,7 @@ def test_no_duplicate_spans_when_cursorwrapper_and_execute_wrappers_coexist():
                 return self.cursor.execute(s, p)
 
             context = {"connection": self.db, "cursor": self.cursor}
-            return tp_dog_django_db_execute_wrapper(_raw_exec, sql, params, False, context)
+            return tp_trace_django_db_execute_wrapper(_raw_exec, sql, params, False, context)
 
     wrapper_instance = RealDjangoCursorWrapper(mock_cursor, mock_db)
 
@@ -795,7 +795,7 @@ def test_no_duplicate_spans_when_cursorwrapper_and_execute_wrappers_coexist():
 def test_suppress_db_instrumentation_disables_otel_dbapi():
     """Verify suppress_db_instrumentation disables is_instrumentation_enabled for official OTel drivers."""
     from opentelemetry.instrumentation.utils import is_instrumentation_enabled
-    from tp_dog.integrations.postgres.cursor import suppress_db_instrumentation
+    from tp_trace.integrations.postgres.cursor import suppress_db_instrumentation
 
     assert is_instrumentation_enabled() is True
     with suppress_db_instrumentation():
@@ -806,7 +806,7 @@ def test_suppress_db_instrumentation_disables_otel_dbapi():
 def test_reentrant_guard_thread_isolation():
     """Verify reentrant_guard with contextvars isolates concurrent threads sharing the same instance."""
     import threading
-    from tp_dog.tracing import reentrant_guard
+    from tp_trace.tracing import reentrant_guard
 
     class SharedConnection:
         pass
@@ -833,11 +833,11 @@ def test_reentrant_guard_thread_isolation():
 
 def test_single_exception_recorded_on_sql_error():
     """Verify an erroring SQL query produces exactly one exception event in its span."""
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="error-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="error-svc", exporter=exporter, export_batch=False)
 
-    from tp_dog.integrations.postgres.cursor import tp_dog_django_db_execute_wrapper
+    from tp_trace.integrations.postgres.cursor import tp_trace_django_db_execute_wrapper
 
     class FailingCursor:
         pass
@@ -850,7 +850,7 @@ def test_single_exception_recorded_on_sql_error():
     context = {"cursor": cursor, "connection": conn}
 
     with pytest.raises(ValueError):
-        tp_dog_django_db_execute_wrapper(bad_execute, "SELECT BAD SYNTAX", None, False, context)
+        tp_trace_django_db_execute_wrapper(bad_execute, "SELECT BAD SYNTAX", None, False, context)
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
@@ -874,9 +874,9 @@ def test_single_exception_recorded_on_sql_error():
 
 def test_failing_cursor_exec_runs_statement_exactly_once():
     """A failing query must be sent to the server once, never retried."""
-    from tp_dog.integrations.postgres.cursor import traced_django_cursor_exec
+    from tp_trace.integrations.postgres.cursor import traced_django_cursor_exec
 
-    tp_dog.init(project_name="pg-no-retry", export_batch=False)
+    tp_trace.init(project_name="pg-no-retry", export_batch=False)
     calls: list = []
 
     def execute(sql, *args, **kwargs):
@@ -892,9 +892,9 @@ def test_failing_cursor_exec_runs_statement_exactly_once():
 
 def test_failing_execute_wrapper_runs_statement_exactly_once():
     """The connection.execute_wrappers path must not retry either."""
-    from tp_dog.integrations.postgres.cursor import tp_dog_django_db_execute_wrapper
+    from tp_trace.integrations.postgres.cursor import tp_trace_django_db_execute_wrapper
 
-    tp_dog.init(project_name="pg-no-retry-2", export_batch=False)
+    tp_trace.init(project_name="pg-no-retry-2", export_batch=False)
     calls: list = []
 
     def execute(sql, params, many, context):
@@ -907,17 +907,17 @@ def test_failing_execute_wrapper_runs_statement_exactly_once():
     context = {"cursor": MockRawCursor(), "connection": conn}
 
     with pytest.raises(ValueError):
-        tp_dog_django_db_execute_wrapper(execute, "SELECT BAD", None, False, context)
+        tp_trace_django_db_execute_wrapper(execute, "SELECT BAD", None, False, context)
 
     assert len(calls) == 1, f"statement executed {len(calls)} times; application code must run once"
 
 
 def test_successful_query_runs_statement_exactly_once():
     """The happy path is unaffected by the retry removal."""
-    from tp_dog.integrations.postgres.cursor import traced_django_cursor_exec
+    from tp_trace.integrations.postgres.cursor import traced_django_cursor_exec
 
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="pg-happy", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="pg-happy", exporter=exporter, export_batch=False)
 
     calls: list = []
 
@@ -933,7 +933,7 @@ def test_successful_query_runs_statement_exactly_once():
 
 def test_db_statement_and_full_statement_separation():
     """Verify that db.statement contains bounded normalized SQL while db.statement.full contains complete SQL."""
-    from tp_dog.integrations.postgres.cursor import _build_db_span_context
+    from tp_trace.integrations.postgres.cursor import _build_db_span_context
 
     conn = MockDatabaseConnection(
         alias="default", vendor="postgresql", host="localhost", port=5432, db_name="shop"
@@ -961,7 +961,7 @@ def test_db_execute_wrapper_suppresses_downstream_driver_instrumentation():
     """Verify that during DB query execution, downstream OTel instrumentors (psycopg2) are suppressed."""
     from unittest.mock import MagicMock
     from opentelemetry.instrumentation.utils import is_instrumentation_enabled
-    from tp_dog.integrations.postgres.cursor import tp_dog_django_db_execute_wrapper
+    from tp_trace.integrations.postgres.cursor import tp_trace_django_db_execute_wrapper
 
     instrumentation_state = []
 
@@ -970,7 +970,7 @@ def test_db_execute_wrapper_suppresses_downstream_driver_instrumentation():
         return "ok"
 
     context = {"connection": MagicMock(vendor="postgresql", alias="default")}
-    tp_dog_django_db_execute_wrapper(mock_execute, "SELECT 1", None, False, context)
+    tp_trace_django_db_execute_wrapper(mock_execute, "SELECT 1", None, False, context)
 
     assert len(instrumentation_state) == 1
     assert instrumentation_state[0] is False  # Suppressed!

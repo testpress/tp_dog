@@ -1,9 +1,9 @@
-"""Unit tests for endpoint-based and custom rule sampling in tp_dog SDK v3."""
+"""Unit tests for endpoint-based and custom rule sampling in tp_trace SDK v3."""
 
 import pytest
 from opentelemetry.sdk.trace.sampling import Decision
-from tp_dog.config import SDKConfig
-from tp_dog.sampler import TpDogRuleBasedSampler, create_tp_dog_sampler
+from tp_trace.config import SDKConfig
+from tp_trace.sampler import TpDogRuleBasedSampler, create_tp_trace_sampler
 
 
 def test_ignore_endpoints_wildcard_matching():
@@ -75,9 +75,9 @@ def test_config_resolves_sampling_kwargs_and_env(monkeypatch):
     assert cfg_env.endpoint_sample_rules == {"/api/checkout/*": 1.0, "/api/search/*": 0.5}
 
 
-def test_create_tp_dog_sampler():
-    """Verify create_tp_dog_sampler returns ParentBased wrapper."""
-    sampler = create_tp_dog_sampler(
+def test_create_tp_trace_sampler():
+    """Verify create_tp_trace_sampler returns ParentBased wrapper."""
+    sampler = create_tp_trace_sampler(
         global_sample_rate=1.0,
         ignore_endpoints=["/health"],
     )
@@ -146,7 +146,7 @@ def test_parameterized_route_template_matching():
 def test_endpoint_sample_rules_validation_env_var(monkeypatch, malformed_rule):
     """Verify malformed TP_DOG_ENDPOINT_SAMPLE_RULES raises ValueError with descriptive message."""
     monkeypatch.setenv("TP_DOG_ENDPOINT_SAMPLE_RULES", malformed_rule)
-    with pytest.raises(ValueError, match="tp_dog:"):
+    with pytest.raises(ValueError, match="tp_trace:"):
         SDKConfig.from_env_and_kwargs()
 
 
@@ -165,7 +165,7 @@ def test_endpoint_sample_rules_validation_env_var(monkeypatch, malformed_rule):
 )
 def test_endpoint_sample_rules_validation_kwargs(invalid_rules):
     """Verify invalid endpoint_sample_rules kwargs raise ValueError."""
-    with pytest.raises(ValueError, match="tp_dog:"):
+    with pytest.raises(ValueError, match="tp_trace:"):
         SDKConfig.from_env_and_kwargs(endpoint_sample_rules=invalid_rules)
 
 
@@ -203,21 +203,21 @@ def test_endpoint_sample_rules_empty_dict_overrides_env_var(monkeypatch):
     assert cfg.endpoint_sample_rules == {}
 
 
-def test_tp_dog_init_handles_invalid_config_without_crashing():
+def test_tp_trace_init_handles_invalid_config_without_crashing():
     """Verify passing invalid config does not raise ValueError and crash host application."""
-    import tp_dog
+    import tp_trace
 
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     try:
         # Invalid SDK-prop values must NOT crash host application; falls back safely
-        provider = tp_dog.init(
+        provider = tp_trace.init(
             project_name="testpress",
             endpoint_sample_rules={"/health": 2.5},
         )
         assert provider is not None
-        assert tp_dog._ACTIVE_CONFIG is not None
+        assert tp_trace._ACTIVE_CONFIG is not None
     finally:
-        tp_dog._reset_for_testing()
+        tp_trace._reset_for_testing()
 
 
 def test_remote_parent_aware_sampler_respects_ignore_endpoints():
@@ -230,7 +230,7 @@ def test_remote_parent_aware_sampler_respects_ignore_endpoints():
         set_span_in_context,
     )
 
-    sampler = create_tp_dog_sampler(
+    sampler = create_tp_trace_sampler(
         global_sample_rate=1.0,
         ignore_endpoints=["/health*", "/ping"],
     )

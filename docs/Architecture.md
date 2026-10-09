@@ -1,6 +1,6 @@
 # Architecture & System Design
 
-This document explains how the **tp_dog Observability Stack** is arranged, how data flows between components, and how each service in the Docker Compose environment is configured.
+This document explains how the **tp_trace Observability Stack** is arranged, how data flows between components, and how each service in the Docker Compose environment is configured.
 
 ---
 
@@ -148,11 +148,11 @@ Here is the exact lifecycle of telemetry during an HTTP request:
 
 ```text
 1. Client sends HTTP GET /api/products/123/ to Django application.
-2. tp_dog SDK:
+2. tp_trace SDK:
    - Starts root span `django.request` and normalizes route to `/api/products/{id}/`.
    - Starts child spans for Middleware, Views, Postgres SQL, Redis cache, and Templates.
    - Wraps and closes all spans upon response.
-3. tp_dog SDK batches spans and sends via HTTP POST to `http://otel-collector:4318/v1/traces`.
+3. tp_trace SDK batches spans and sends via HTTP POST to `http://otel-collector:4318/v1/traces`.
 4. OTel Collector:
    - Passes spans to `spanmetrics` connector -> updates `apm_calls_total` and latency histograms.
    - Forwards raw spans to `tempo:4317`.

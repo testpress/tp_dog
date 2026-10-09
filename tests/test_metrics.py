@@ -15,9 +15,9 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 from django.urls import path, clear_url_caches
 
-import tp_dog
-from tp_dog.integrations.django import DjangoIntegration
-from tp_dog.metrics import (
+import tp_trace
+from tp_trace.integrations.django import DjangoIntegration
+from tp_trace.metrics import (
     LATENCY_BUCKETS_MS,
     RedMetricsRecorder,
     get_metrics_recorder,
@@ -46,15 +46,15 @@ urlpatterns = [
 
 
 @pytest.fixture(autouse=True)
-def setup_django_and_tp_dog():
-    tp_dog._reset_for_testing()
+def setup_django_and_tp_trace():
+    tp_trace._reset_for_testing()
     settings.ROOT_URLCONF = "tests.test_metrics"
     clear_url_caches()
     integration = DjangoIntegration()
     integration.instrument()
     yield
     integration.uninstrument()
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
 
 
 def _get_metric_data_points(metric_reader: InMemoryMetricReader, metric_name: str):
@@ -77,7 +77,7 @@ def test_red_metrics_independent_of_trace_sampling(sample_rate):
     span_exporter = InMemorySpanExporter()
     metric_reader = InMemoryMetricReader()
 
-    tp_dog.init(
+    tp_trace.init(
         project_name="metrics-test-project",
         cluster_name="staging-cluster",
         exporter=span_exporter,
@@ -126,7 +126,7 @@ def test_red_metrics_independent_of_trace_sampling(sample_rate):
 def test_red_metrics_attribute_contract():
     """Verify recorded metric attributes match Grafana APM dashboard requirements."""
     metric_reader = InMemoryMetricReader()
-    tp_dog.init(
+    tp_trace.init(
         project_name="my-app",
         cluster_name="cluster-xyz",
         sample_rate=0.05,  # heavily sampled trace
@@ -168,7 +168,7 @@ def test_red_metrics_carry_institute_tags():
     Prometheus, enabling per-tenant filtering on the full-fidelity SDK metrics.
     """
     metric_reader = InMemoryMetricReader()
-    tp_dog.init(
+    tp_trace.init(
         project_name="institute-app",
         sample_rate=0.1,
         metric_readers=[metric_reader],
@@ -192,7 +192,7 @@ def test_red_metrics_carry_institute_tags():
 def test_red_metrics_exception_handling():
     """Verify unhandled exceptions record 500 error metric with error='true'."""
     metric_reader = InMemoryMetricReader()
-    tp_dog.init(
+    tp_trace.init(
         project_name="test-crash",
         sample_rate=0.0,  # traces completely dropped
         metric_readers=[metric_reader],
@@ -221,7 +221,7 @@ def test_red_metrics_exception_handling():
 def test_red_metrics_early_response_404():
     """Verify 404 responses record calls_total with error='false' (non-5xx)."""
     metric_reader = InMemoryMetricReader()
-    tp_dog.init(
+    tp_trace.init(
         project_name="test-404",
         sample_rate=0.1,
         metric_readers=[metric_reader],
@@ -248,7 +248,7 @@ def test_red_metrics_early_response_404():
 def test_red_metrics_recording_failure_never_disrupts_request(monkeypatch):
     """Verify that if metric recording crashes internally, Django request succeeds normally."""
     metric_reader = InMemoryMetricReader()
-    tp_dog.init(
+    tp_trace.init(
         project_name="resilience-test",
         sample_rate=1.0,
         metric_readers=[metric_reader],
@@ -276,7 +276,7 @@ def test_red_metrics_recording_failure_never_disrupts_request(monkeypatch):
 def test_histogram_explicit_bucket_boundaries():
     """Verify duration histogram matches exact APM buckets."""
     metric_reader = InMemoryMetricReader()
-    tp_dog.init(
+    tp_trace.init(
         project_name="bucket-test",
         metric_readers=[metric_reader],
         export_batch=False,
@@ -304,7 +304,7 @@ def test_histogram_explicit_bucket_boundaries():
 
 def test_default_init_creates_otlp_metric_reader():
     """Verify default init() creates PeriodicExportingMetricReader targeting /v1/metrics."""
-    tp_dog.init(
+    tp_trace.init(
         project_name="otlp-export-test",
         endpoint="http://collector.local:4318",
         export_batch=False,
@@ -316,7 +316,7 @@ def test_default_init_creates_otlp_metric_reader():
     reader = recorder.readers[0]
 
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-    from tp_dog.exporter import SafeMetricExporter
+    from tp_trace.exporter import SafeMetricExporter
 
     assert isinstance(reader, PeriodicExportingMetricReader)
     assert isinstance(reader._exporter, SafeMetricExporter)
@@ -325,7 +325,7 @@ def test_default_init_creates_otlp_metric_reader():
 
 def test_metrics_disabled_flag():
     """Verify metrics_enabled=False prevents creating metric readers."""
-    tp_dog.init(
+    tp_trace.init(
         project_name="metrics-disabled-test",
         endpoint="http://collector.local:4318",
         metrics_enabled=False,
@@ -339,7 +339,7 @@ def test_metrics_disabled_flag():
 def test_safe_metric_exporter_absorbs_errors():
     """Verify SafeMetricExporter catches exceptions and returns FAILURE safely."""
     from opentelemetry.sdk.metrics.export import MetricExportResult
-    from tp_dog.exporter import SafeMetricExporter
+    from tp_trace.exporter import SafeMetricExporter
 
     class FaultyExporter:
         def __init__(self):

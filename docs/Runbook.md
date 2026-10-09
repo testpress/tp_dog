@@ -1,6 +1,6 @@
 # Operational Runbook
 
-Production operations and incident triage guide for tp_dog APM.
+Production operations and incident triage guide for tp_trace APM.
 
 ---
 
@@ -10,7 +10,7 @@ curl -s http://<collector>:8889/metrics | grep apm_calls_total
 ```
 *If counter is incrementing, spans are reaching the collector and metrics are being derived.*
 
-### 2. How do I disable tp_dog on one server?
+### 2. How do I disable tp_trace on one server?
 ```bash
 TP_DOG_DISABLED=true
 ```
@@ -20,7 +20,7 @@ TP_DOG_DISABLED=true
 ```bash
 TP_DOG_DEBUG=true
 ```
-*Emits verbose span creation and export logs to the `tp_dog.*` logger namespace only.*
+*Emits verbose span creation and export logs to the `tp_trace.*` logger namespace only.*
 
 ### 4. Is the Collector dropping spans?
 ```bash

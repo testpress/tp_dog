@@ -1,8 +1,8 @@
 # Supported Components & Integrations
 
-tp_dog automatically detects and instruments key frameworks, databases, and client libraries in your Python application.
+tp_trace automatically detects and instruments key frameworks, databases, and client libraries in your Python application.
 
-When `tp_dog.init()` runs, it auto-patches all installed components with zero configuration.
+When `tp_trace.init()` runs, it auto-patches all installed components with zero configuration.
 
 ```text
                                 DJANGO REQUEST WATERFALL
@@ -77,7 +77,7 @@ Instruments Redis client commands and Django cache operations.
 | **`🔸 django_redis.cache.<op>`** | `CLIENT` | Django cache operations (`get`, `set`, `delete_many`, etc.) | `django.cache.operation`, `django.cache.backend`, `django.cache.key`, `django.cache.hit` |
 
 ### Key Features
-- **Sensitive Command Redaction**: Arguments for commands like `AUTH`, `CONFIG`, and `PASSWORD` are scrubbed. *This behaviour is inherited from the upstream `opentelemetry-instrumentation-redis` package — tp_dog registers no Redis hooks of its own, so the guarantees (and gaps) are that package's and move with its version.*
+- **Sensitive Command Redaction**: Arguments for commands like `AUTH`, `CONFIG`, and `PASSWORD` are scrubbed. *This behaviour is inherited from the upstream `opentelemetry-instrumentation-redis` package — tp_trace registers no Redis hooks of its own, so the guarantees (and gaps) are that package's and move with its version.*
 - **Network Safety**: Masks internal IP addresses and formats socket connection targets cleanly.
 
 > **Known gaps**: RediSearch query arguments and document field values are
@@ -121,9 +121,9 @@ Instruments AWS SDK operations (S3, SQS, DynamoDB, or local MinIO/mock services)
 All installed integrations are enabled by default (`auto_patch=True`). You can selectively disable any component during initialization:
 
 ```python
-import tp_dog
+import tp_trace
 
-tp_dog.init(
+tp_trace.init(
     project_name="my-django-service",
     integrations={
         "django": True,      # Django request/views/middleware

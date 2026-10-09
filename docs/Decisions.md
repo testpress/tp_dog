@@ -1,6 +1,6 @@
-# tp_dog — Decision Log
+# tp_trace — Decision Log
 
-This document records the key technical decisions behind the tp_dog observability stack and the reasoning behind them.
+This document records the key technical decisions behind the tp_trace observability stack and the reasoning behind them.
 
 Each decision captures **what was chosen, why it was chosen, and the trade-offs introduced**.
 
@@ -10,7 +10,7 @@ Each decision captures **what was chosen, why it was chosen, and the trade-offs 
 
 **Why?**
 
-OpenTelemetry provides vendor-neutral APIs, SDKs, telemetry formats, and context propagation. tp_dog uses OTLP for telemetry transport and W3C Trace Context for distributed tracing.
+OpenTelemetry provides vendor-neutral APIs, SDKs, telemetry formats, and context propagation. tp_trace uses OTLP for telemetry transport and W3C Trace Context for distributed tracing.
 
 This keeps the instrumentation layer independent from the backend. The same telemetry can be routed to systems such as Tempo, Jaeger, or other OTLP-compatible backends without rewriting application instrumentation.
 
@@ -23,7 +23,7 @@ OpenTelemetry introduces additional infrastructure and requires us to follow its
 
 **Why?**
 
-The standard instrumentation provides basic Django tracing, but tp_dog requires deeper application visibility.
+The standard instrumentation provides basic Django tracing, but tp_trace requires deeper application visibility.
 
 Custom instrumentation allows us to capture:
 
@@ -153,7 +153,7 @@ Database performance needs to be analyzed by topology.
 
 A slow query against a read replica has a different investigation path from a slow query against the primary database.
 
-tp_dog therefore attaches database-role information to database spans where it can be determined reliably.
+tp_trace therefore attaches database-role information to database spans where it can be determined reliably.
 
 **How We Detect It:**
 1. **Alias & Map Heuristics**: Role is resolved from the Django database connection alias alone, in this precedence order:
@@ -240,7 +240,7 @@ The instrumentation remains dependent on the behavior of the underlying HTTP cli
 
 **Why?**
 
-AWS operations need to appear as dependency spans, but tp_dog does not require a custom AWS telemetry engine.
+AWS operations need to appear as dependency spans, but tp_trace does not require a custom AWS telemetry engine.
 
 The integration captures useful information such as:
 
@@ -300,7 +300,7 @@ If the Collector is unavailable because of:
 
 the application should continue processing requests.
 
-tp_dog therefore wraps telemetry export with failure handling.
+tp_trace therefore wraps telemetry export with failure handling.
 
 **Trade-off:**
 Isolation means telemetry can be lost when the telemetry pipeline is unavailable. Reliability and loss behavior must therefore be measured separately.
@@ -371,7 +371,7 @@ This requires consistent configuration between the metrics system, Grafana, and 
 
 Sensitive data must be removed at the point of origin rather than relying on downstream collection layers.
 
-tp_dog applies sanitization before telemetry is exported:
+tp_trace applies sanitization before telemetry is exported:
 
 * **SQL Queries**: Replaces numerical literals, string constants, and UUIDs with `%s` parameters to protect customer data and normalize query summaries.
 * **URLs**: Strips basic-auth credentials and sensitive URL query tokens.
@@ -402,7 +402,7 @@ Traces serve as the primary diagnostic signal for root-cause analysis (answering
 
 **Why?**
 
-tp_dog is the deployed APM system, not a feasibility exercise. That makes its
+tp_trace is the deployed APM system, not a feasibility exercise. That makes its
 cost profile and failure modes production concerns rather than validation
 outcomes, and it means the following are standing operational responsibilities
 rather than pre-adoption checks:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# generate_anomaly.sh - tp_dog APM Anomaly & Incident Generator
+# generate_anomaly.sh - tp_trace APM Anomaly & Incident Generator
 # ==============================================================================
 # Injects targeted or mixed anomalies to demonstrate the Exception-Driven
 # "Needs Attention" / Operational System Overview dashboard.
@@ -128,7 +128,7 @@ fi
 # Banner
 echo -e "${C_CYAN}${C_BOLD}"
 echo "================================================================="
-echo "   ⚡ tp_dog APM Anomaly & Incident Generator"
+echo "   ⚡ tp_trace APM Anomaly & Incident Generator"
 echo "   Target URL:     ${BASE_URL}"
 echo "   Scenario:       ${SCENARIO}"
 if [ "$SCENARIO" = "mixed" ]; then
@@ -320,5 +320,5 @@ wait "${PIDS[@]}" 2>/dev/null || true
 echo ""
 echo -e "${C_GREEN}${C_BOLD}✔ Anomaly generation cycle complete!${C_RESET}"
 echo -e "Open the Grafana dashboards to view all detected issues:"
-echo -e "  ${C_CYAN}Needs Attention Table:${C_RESET} http://localhost:3000/d/tp_dog-needs-attention"
-echo -e "  ${C_CYAN}Service Catalog Cards:${C_RESET} http://localhost:3000/d/tp_dog-project-catalog"
+echo -e "  ${C_CYAN}Needs Attention Table:${C_RESET} http://localhost:3000/d/tp_trace-needs-attention"
+echo -e "  ${C_CYAN}Service Catalog Cards:${C_RESET} http://localhost:3000/d/tp_trace-project-catalog"

@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libc-dev \
   && rm -rf /var/lib/apt/lists/*
 
-# tp_dog SDK (editable install from repo root build context)
+# tp_trace SDK (editable install from repo root build context)
 COPY pyproject.toml .
 COPY src/ ./src/
 

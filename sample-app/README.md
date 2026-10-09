@@ -1,6 +1,6 @@
-# Sample Django Application (tp_dog Demo)
+# Sample Django Application (tp_trace Demo)
 
-This is the reference Django demonstration application instrumented with the **tp_dog OpenTelemetry SDK**. It provides endpoints that exercise PostgreSQL (primary and read replicas), PgBouncer connection pooling, Redis caching & pipelines, external HTTP calls, AWS S3/MinIO storage, and error scenarios.
+This is the reference Django demonstration application instrumented with the **tp_trace OpenTelemetry SDK**. It provides endpoints that exercise PostgreSQL (primary and read replicas), PgBouncer connection pooling, Redis caching & pipelines, external HTTP calls, AWS S3/MinIO storage, and error scenarios.
 
 ---
 
@@ -13,7 +13,7 @@ This is the reference Django demonstration application instrumented with the **t
                    └──────┬──────┘
                           │
                    ┌──────▼──────┐
-                   │   Django    │ (tp_dog SDK auto-instruments)
+                   │   Django    │ (tp_trace SDK auto-instruments)
                    └──────┬──────┘
         ┌─────────────┼─────────────┬─────────────┬─────────────┐
         │             │             │             │             │
@@ -63,15 +63,15 @@ Access the services:
 
 ---
 
-## How tp_dog is Integrated
+## How tp_trace is Integrated
 
 Telemetry is initialized once in `config/settings.py` by calling `setup_telemetry()` from `config/otel.py`:
 
 ```python
 # config/otel.py
-import tp_dog
+import tp_trace
 
-tp_dog.init(
+tp_trace.init(
     project_name="otel-sample",
     cluster_name="demo-cluster",
     tags={
@@ -82,7 +82,7 @@ tp_dog.init(
 )
 ```
 
-Because `auto_patch=True` is the default, tp_dog automatically hooks:
+Because `auto_patch=True` is the default, tp_trace automatically hooks:
 * **Django**: Inbound HTTP requests, view execution, middleware, and templates.
 * **PostgreSQL (`psycopg2`)**: Cursor queries, sanitized SQL, and PgBouncer connection identification.
 * **Redis (`django_redis` / `redis-py`)**: Cache operations and pipeline executions.

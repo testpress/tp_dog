@@ -8,26 +8,26 @@ from requests.sessions import Session
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import get_tracer, SpanKind, StatusCode
 
-import tp_dog
-from tp_dog.integrations.requests import RequestsIntegration
-from tp_dog.integrations.requests.client import (
+import tp_trace
+from tp_trace.integrations.requests import RequestsIntegration
+from tp_trace.integrations.requests.client import (
     _extract_request_meta,
-    tp_dog_request_hook,
-    tp_dog_response_hook,
+    tp_trace_request_hook,
+    tp_trace_response_hook,
 )
 
 
 @pytest.fixture(autouse=True)
 def clean_sdk():
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     yield
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
 
 
 @pytest.fixture
 def memory_exporter():
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="test-http-service",
         environment="test",
         exporter=exporter,
@@ -59,14 +59,14 @@ def test_extract_request_meta():
     assert scheme == "http"
 
 
-def test_tp_dog_request_hook(memory_exporter):
+def test_tp_trace_request_hook(memory_exporter):
     tracer = get_tracer("test-tracer")
     req = PreparedRequest()
     req.method = "GET"
     req.url = "https://httpbin.org/get"
 
     with tracer.start_as_current_span("initial_name") as span:
-        tp_dog_request_hook(span, req)
+        tp_trace_request_hook(span, req)
 
     spans = memory_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -82,14 +82,14 @@ def test_tp_dog_request_hook(memory_exporter):
     assert attrs["resource.name"] == "GET https://httpbin.org/get"
 
 
-def test_tp_dog_response_hook_error(memory_exporter):
+def test_tp_trace_response_hook_error(memory_exporter):
     tracer = get_tracer("test-tracer")
     req = PreparedRequest()
     res = Response()
     res.status_code = 404
 
     with tracer.start_as_current_span("test_span") as span:
-        tp_dog_response_hook(span, req, res)
+        tp_trace_response_hook(span, req, res)
 
     spans = memory_exporter.get_finished_spans()
     assert len(spans) == 1
@@ -136,7 +136,7 @@ def test_requests_integration_lifecycle(memory_exporter):
 
 
 def test_requests_integration_manager_registration():
-    from tp_dog.integrations import get_integration_manager
+    from tp_trace.integrations import get_integration_manager
 
     mgr = get_integration_manager()
     assert "requests" in mgr._registered_classes

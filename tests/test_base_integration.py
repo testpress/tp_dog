@@ -8,9 +8,9 @@ which silently doubled side effects for every application error.
 
 import pytest
 
-import tp_dog
-from tp_dog.integrations.base import BaseIntegration
-from tp_dog.tracing import traced_span
+import tp_trace
+from tp_trace.integrations.base import BaseIntegration
+from tp_trace.tracing import traced_span
 
 
 class _FakeIntegration(BaseIntegration):
@@ -25,7 +25,7 @@ class _FakeIntegration(BaseIntegration):
 
 @pytest.fixture
 def integration():
-    tp_dog.init(project_name="wrap-seam-test", export_batch=False)
+    tp_trace.init(project_name="wrap-seam-test", export_batch=False)
     integ = _FakeIntegration()
     yield integ
     integ.uninstrument()
@@ -117,7 +117,7 @@ def test_traced_span_degrades_when_provider_unusable(monkeypatch):
     This is what makes removing the retry safe: telemetry failure is absorbed
     here, so an exception escaping a wrapper is the application's own.
     """
-    import tp_dog.tracing as tracing_mod
+    import tp_trace.tracing as tracing_mod
 
     def _boom(*args, **kwargs):
         raise RuntimeError("tracer provider unavailable")
@@ -137,7 +137,7 @@ def test_traced_span_degrades_when_provider_unusable(monkeypatch):
 
 def test_traced_span_body_exception_propagates_once(monkeypatch):
     """With a working provider, a body exception still runs the body once."""
-    tp_dog.init(project_name="body-exc", export_batch=False)
+    tp_trace.init(project_name="body-exc", export_batch=False)
     calls = []
 
     with pytest.raises(RuntimeError, match="app bug"):
@@ -150,7 +150,7 @@ def test_traced_span_body_exception_propagates_once(monkeypatch):
 
 def test_alias_opt_out_disables_canonical_integration():
     """Verify that opting out via an alias (e.g. psycopg2=False) disables the canonical integration."""
-    from tp_dog.integrations.manager import IntegrationManager
+    from tp_trace.integrations.manager import IntegrationManager
 
     mgr = IntegrationManager()
 

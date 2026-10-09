@@ -1,5 +1,5 @@
 # ==============================================================================
-# tp_dog - Observability server (production)
+# tp_trace - Observability server (production)
 # ==============================================================================
 # Runs on the host that holds the long-term observability data. This is the
 # "different server" referred to in the deployment guide: Tempo + Prometheus +

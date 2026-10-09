@@ -70,7 +70,7 @@ OpenTelemetry provides a single, standardized, open protocol for generating and 
 ```text
 ┌─────────────────┐
 │   Application   │
-│   (tp_dog)   │
+│   (tp_trace)   │
 └────────┬────────┘
          │ OTLP / HTTP (Standard OpenTelemetry Protocol)
          ▼
@@ -101,7 +101,7 @@ OpenTelemetry provides a single, standardized, open protocol for generating and 
 A **Resource** captures static metadata about the entity producing telemetry (e.g., service name, environment, cluster, host, version).
 
 Common standard resource attributes:
-- `service.name`: OTel's name for the process identity. In tp_dog this is the **project** (the instrumented application, e.g. `course-service`) — it is not a running component.
+- `service.name`: OTel's name for the process identity. In tp_trace this is the **project** (the instrumented application, e.g. `course-service`) — it is not a running component.
 - `deployment.environment.name` or `deployment.environment`: Deployment tier (e.g. `production`, `staging`, `development`).
 - `service.version`: The semantic release version (e.g. `1.2.0`).
 - `service.instance.id`: A unique instance identifier (e.g., hostname and process ID).

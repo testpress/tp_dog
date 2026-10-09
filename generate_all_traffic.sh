@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# generate_all_traffic.sh — Universal Multi-App Traffic Generator for tp_dog APM
+# generate_all_traffic.sh — Universal Multi-App Traffic Generator for tp_trace APM
 # ==============================================================================
 # Generates realistic, concurrent traffic across apps:
 #   1. Django Full App (Port 8001)   — Django + Postgres (Primary & Replicas) + Redis + External API

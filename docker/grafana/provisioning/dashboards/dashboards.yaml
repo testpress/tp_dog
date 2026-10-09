@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: 'tp_dog APM Dashboards'
+  - name: 'tp_trace APM Dashboards'
     orgId: 1
-    folder: 'tp_dog APM'
+    folder: 'tp_trace APM'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10

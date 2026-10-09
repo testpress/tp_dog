@@ -1,6 +1,6 @@
-"""tp_dog OpenTelemetry bootstrap for the Django POC sample app.
+"""tp_trace OpenTelemetry bootstrap for the Django POC sample app.
 
-Initializes the tp_dog SDK with a single init() call. When auto_patch=True
+Initializes the tp_trace SDK with a single init() call. When auto_patch=True
 (the default), all installed integrations (Django, PostgreSQL, Redis, etc.)
 are automatically detected and patched.
 
@@ -13,23 +13,24 @@ logger = logging.getLogger("config.otel")
 
 
 def setup_telemetry():
-    """Initialize tp_dog with auto-patching. Idempotent, fail-safe."""
-    if os.environ.get("TP_DOG_DISABLED", "").lower() in ("1", "true", "yes"):
-        logger.info("tp_dog disabled via TP_DOG_DISABLED")
+    """Initialize tp_trace with auto-patching. Idempotent, fail-safe."""
+    disabled = os.environ.get("TP_TRACE_DISABLED", os.environ.get("TP_DOG_DISABLED", "")).lower()
+    if disabled in ("1", "true", "yes"):
+        logger.info("tp_trace disabled via TP_TRACE_DISABLED")
         return False
     try:
-        import tp_dog
+        import tp_trace
     except ImportError:
-        logger.info("tp_dog not installed; observability disabled")
+        logger.info("tp_trace not installed; observability disabled")
         return False
     try:
         # Minimal init — auto_patch=True (default) detects all installed integrations.
         # Project (application) name, environment, endpoint resolve from env vars:
-        #   TP_DOG_PROJECT_NAME / OTEL_SERVICE_NAME
-        #   TP_DOG_ENVIRONMENT / OTEL_ENVIRONMENT
-        #   TP_DOG_ENDPOINT / OTEL_EXPORTER_OTLP_ENDPOINT
+        #   TP_TRACE_PROJECT_NAME / OTEL_SERVICE_NAME
+        #   TP_TRACE_ENVIRONMENT / OTEL_ENVIRONMENT
+        #   TP_TRACE_ENDPOINT / OTEL_EXPORTER_OTLP_ENDPOINT
         # Or auto-detected from Django settings if configured there.
-        tp_dog.init(
+        tp_trace.init(
             project_name="otel-sample",
             cluster_name="Dummy",
             tags={
@@ -43,8 +44,8 @@ def setup_telemetry():
                 "/api/multi-db/" : 0
             },
         )
-        logger.info("tp_dog initialized with auto-patching")
+        logger.info("tp_trace initialized with auto-patching")
         return True
     except Exception:
-        logger.exception("tp_dog initialization failed; continuing without observability")
+        logger.exception("tp_trace initialization failed; continuing without observability")
         return False

@@ -34,9 +34,9 @@ if not settings.configured:
     )
     django.setup()
 
-import tp_dog
-from tp_dog.config import SDKConfig
-from tp_dog.integrations.django import DjangoIntegration
+import tp_trace
+from tp_trace.config import SDKConfig
+from tp_trace.integrations.django import DjangoIntegration
 
 
 def sample_view(request):
@@ -81,7 +81,7 @@ urlpatterns = [
 
 @pytest.fixture(autouse=True)
 def clean_sdk_and_django():
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
     from django.urls import clear_url_caches
     settings.ROOT_URLCONF = "tests.test_django"
     clear_url_caches()
@@ -89,13 +89,13 @@ def clean_sdk_and_django():
     integration.instrument()
     yield
     integration.uninstrument()
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
 
 
 def test_request_span_created():
     """Verify standard HTTP request creates a SERVER root span with HTTP attributes."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -126,7 +126,7 @@ def test_request_span_created():
 def test_view_span_resolves_name():
     """Verify internal view execution generates a django.view child span."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -149,7 +149,7 @@ def test_view_span_resolves_name():
 def test_template_span_created():
     """Verify template rendering generates a django.template child span."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -172,7 +172,7 @@ def test_template_span_created():
 def test_error_500_marks_span():
     """Verify 500 responses mark request spans as ERROR."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -194,7 +194,7 @@ def test_error_500_marks_span():
 def test_w3c_traceparent_propagation():
     """Verify incoming W3C traceparent headers link the root request span to the distributed trace."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -219,7 +219,7 @@ def test_w3c_traceparent_propagation():
 def test_w3c_traceparent_ignored_when_extract_disabled():
     """Verify incoming W3C traceparent headers are ignored when extract_trace_context=False."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -253,7 +253,7 @@ def test_w3c_traceparent_ignored_when_extract_disabled():
 def test_w3c_traceparent_callable_filter():
     """Verify extract_trace_context accepts a callable to filter external callers."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -304,7 +304,7 @@ def test_w3c_traceparent_callable_filter():
 def test_throttled_429_marks_span():
     """Verify 429 Too Many Requests sets status code correctly without 5xx error flag."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -326,7 +326,7 @@ def test_throttled_429_marks_span():
 def test_static_tags_applied_to_request_span():
     """Verify static tags from SDKConfig.tags are applied to request spans."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -352,7 +352,7 @@ def test_static_tags_applied_to_request_span():
 def test_static_tags_applied_to_view_span():
     """Verify static tags from SDKConfig.tags are applied to view spans."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -386,7 +386,7 @@ def test_on_request_span_callback():
         span.set_attribute("custom.request_path", getattr(request, "path", ""))
 
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -417,7 +417,7 @@ def test_on_request_span_callback_exception_silenced():
         raise RuntimeError("boom")
 
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -442,7 +442,7 @@ def test_on_request_span_captures_middleware_attributes():
     """Verify on_request_span callback sees attributes attached dynamically by middleware."""
     from types import SimpleNamespace
     from django.core.handlers.wsgi import WSGIHandler
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
 
     def _tag_institute_subdomain(span, request):
         institute = getattr(request, "institute", None)
@@ -450,7 +450,7 @@ def test_on_request_span_captures_middleware_attributes():
             span.set_attribute("institute.subdomain", institute.subdomain)
 
     exporter = InMemorySpanExporter()
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -479,13 +479,13 @@ def test_on_request_span_captures_middleware_attributes():
 def test_on_request_span_with_response_argument():
     """Verify on_request_span callback supports optional 3-argument signature."""
     from django.core.handlers.wsgi import WSGIHandler
-    tp_dog._reset_for_testing()
+    tp_trace._reset_for_testing()
 
     exporter = InMemorySpanExporter()
     def my_callback(span, request, response):
         span.set_attribute("response.content_type", response.get("Content-Type", ""))
 
-    tp_dog.init(
+    tp_trace.init(
         project_name="django-test-svc",
         exporter=exporter,
         export_batch=False,
@@ -507,7 +507,7 @@ def test_on_request_span_with_response_argument():
 
 def test_callback_takes_response_cached():
     """Verify _callback_takes_response caches callback inspection without repeated overhead."""
-    from tp_dog.integrations.django.request import _callback_takes_response, _CALLBACK_ARITY_CACHE
+    from tp_trace.integrations.django.request import _callback_takes_response, _CALLBACK_ARITY_CACHE
 
     def cb_two(span, req):
         pass
@@ -543,10 +543,10 @@ def test_tags_kwargs_override_env(monkeypatch):
 def test_user_pii_redacted_for_authenticated_request():
     """Verify user PII (emails, usernames) is never attached to spans."""
     from unittest.mock import MagicMock
-    from tp_dog.route_context import get_current_route
+    from tp_trace.route_context import get_current_route
 
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -585,7 +585,7 @@ def test_user_pii_redacted_for_authenticated_request():
 def test_sensitive_query_parameters_sanitized_in_django_request():
     """Verify sensitive query parameters (token, secret, apiKey, etc.) are redacted on span attributes."""
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -613,7 +613,7 @@ def test_sensitive_query_parameters_sanitized_in_django_request():
 
 def test_client_address_trusted_proxies():
     """Verify X-Forwarded-For is only trusted when REMOTE_ADDR is in trusted_proxies, walking right-to-left."""
-    from tp_dog.integrations.django.request import _resolve_client_address
+    from tp_trace.integrations.django.request import _resolve_client_address
 
     class DummyReq:
         def __init__(self, remote_addr, xff=None):
@@ -641,7 +641,7 @@ def test_client_address_trusted_proxies():
 
 def test_unmatched_route_normalization():
     """Verify unresolvable routes map http.route to __unmatched__ to prevent cardinality explosion."""
-    from tp_dog.integrations.django.request import _normalize_route, _preresolve_route
+    from tp_trace.integrations.django.request import _normalize_route, _preresolve_route
 
     # 1. Preresolve on non-existent path
     assert _preresolve_route("/scanners/wp-login.php") == "__unmatched__"
@@ -654,7 +654,7 @@ def test_unmatched_route_normalization():
 
     # 3. Full request through handler for a 404
     exporter = InMemorySpanExporter()
-    tp_dog.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
+    tp_trace.init(project_name="django-test-svc", exporter=exporter, export_batch=False)
 
     from django.core.handlers.wsgi import WSGIHandler
     handler = WSGIHandler()
@@ -678,7 +678,7 @@ def test_unmatched_route_normalization():
 def test_dynamic_tenant_urlconf_resolution(monkeypatch):
     """Verify multi-tenant apps with dynamic request.urlconf, TENANT_URLCONF, or TP_DOG_EXTRA_URLCONFS resolve correctly."""
     from django.conf import settings
-    from tp_dog.integrations.django.request import _normalize_route, _preresolve_route
+    from tp_trace.integrations.django.request import _normalize_route, _preresolve_route
 
     class TenantReq:
         path_info = "/api/v2/posts/"
